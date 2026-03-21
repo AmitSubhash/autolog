@@ -3,8 +3,7 @@
 Your screen, understood.
 
 ```bash
-brew tap AmitSubhash/tap
-brew install autolog
+brew install --cask AmitSubhash/tap/autolog
 ```
 
 AutoLog is a macOS menu bar app that watches what you do on your computer and builds a searchable activity knowledge graph from it. It captures your screen via OCR, infers what you're working on using an LLM, connects related activities across apps, and syncs everything to an Obsidian vault as linked notes.
@@ -114,7 +113,7 @@ swift build
 make bundle
 
 # Launch
-open .build/ContextD.app
+open .build/AutoLog.app
 ```
 
 Grant Accessibility permission when prompted. Screen Recording permission is handled automatically via the system `screencapture` CLI.

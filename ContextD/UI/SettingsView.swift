@@ -341,6 +341,8 @@ struct SettingsView: View {
         case .openrouter:
             customEndpointURL = ""
         }
+        // Recompute API key status after provider switch
+        hasApiKey = OpenRouterClient.hasAPIKey()
     }
 
     private func testProxyConnection() {

@@ -31,8 +31,8 @@ final class ServiceContainer {
         func debugLog(_ msg: String) {
             let line = "[\(Date())] \(msg)\n"
             if let data = line.data(using: .utf8) {
-                if FileManager.default.fileExists(atPath: logFile) {
-                    let handle = FileHandle(forWritingAtPath: logFile)!
+                if FileManager.default.fileExists(atPath: logFile),
+                   let handle = FileHandle(forWritingAtPath: logFile) {
                     handle.seekToEndOfFile()
                     handle.write(data)
                     handle.closeFile()

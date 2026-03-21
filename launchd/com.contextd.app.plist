@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/open</string>
-        <string>/Users/amit/contextd/.build/ContextD.app</string>
+        <string>/Applications/AutoLog.app</string>
     </array>
 
     <key>RunAtLoad</key>

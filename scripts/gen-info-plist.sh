@@ -15,13 +15,13 @@ cat <<'EOF'
     <key>CFBundleIdentifier</key>
     <string>com.contextd.app</string>
     <key>CFBundleName</key>
-    <string>ContextD</string>
+    <string>AutoLog</string>
     <key>CFBundleDisplayName</key>
-    <string>ContextD</string>
+    <string>AutoLog</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>0.2.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleInfoDictionaryVersion</key>
@@ -31,7 +31,7 @@ cat <<'EOF'
     <key>LSUIElement</key>
     <true/>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>ContextD captures screenshots to build a searchable timeline of your computer activity for LLM context enrichment.</string>
+    <string>AutoLog captures screenshots to extract text and build your activity knowledge graph. All data stays on your Mac.</string>
     <key>CFBundleIconFile</key>
     <string>contextd</string>
     <key>NSHighResolutionCapable</key>
