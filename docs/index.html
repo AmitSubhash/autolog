@@ -88,12 +88,13 @@
     padding: 0 24px;
   }
 
-  section { padding: 64px 0; }
+  section { padding: 40px 0; }
+  section + section { border-top: 1px solid var(--border); }
 
   /* Hero */
   .hero {
     text-align: center;
-    padding: 100px 0 60px;
+    padding: 64px 0 48px;
   }
   .hero-badge {
     display: inline-flex; align-items: center; gap: 8px;
@@ -193,7 +194,7 @@
   .install-dmg svg { width: 16px; height: 16px; fill: currentColor; }
 
   /* Pipeline */
-  .pipeline-section { padding: 48px 0 32px; }
+  .pipeline-section { padding: 24px 0 16px; }
   .section-label {
     font-size: 0.72rem;
     font-weight: 600;
@@ -250,11 +251,13 @@
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 16px;
-    margin-top: 48px;
+    margin-top: 32px;
   }
   @media (max-width: 640px) {
     .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .features-grid { grid-template-columns: 1fr; }
     .nav-links a { padding: 6px 8px; font-size: 0.8rem; }
+    .steps-list { grid-template-columns: 1fr 1fr; }
   }
   .stat-card {
     background: var(--bg-card);
@@ -287,7 +290,7 @@
   /* Feature cards */
   .features-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 16px;
   }
   .feature-card {
@@ -325,7 +328,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 32px;
-    margin-top: 48px;
+    margin-top: 24px;
   }
   .getting-started h2 {
     font-size: 1.1rem; font-weight: 600;
@@ -410,7 +413,7 @@
   /* Footer */
   footer {
     text-align: center;
-    padding: 60px 0;
+    padding: 40px 0;
     border-top: 1px solid var(--border);
   }
   .footer-links {
@@ -610,7 +613,7 @@
   </div>
 
   <!-- Features -->
-  <section id="features" class="fade-in">
+  <section id="features">
     <div class="section-label">Features</div>
     <div class="features-grid">
       <div class="feature-card">
@@ -645,7 +648,7 @@
   </section>
 
   <!-- Getting Started -->
-  <section id="start" class="fade-in">
+  <section id="start">
     <div class="section-label">Getting Started</div>
     <div class="getting-started">
       <h2>Up and running in 2 minutes</h2>
@@ -671,7 +674,7 @@
   </section>
 
   <!-- Terminal Demo -->
-  <section id="demo" class="fade-in">
+  <section id="demo">
     <div class="section-label">Live Output</div>
     <div class="terminal">
       <div class="terminal-bar">
@@ -680,7 +683,9 @@
         <div class="terminal-dot green"></div>
         <span class="terminal-title">Haiku Summary Output</span>
       </div>
-      <div class="terminal-body" id="terminal"></div>
+      <div class="terminal-body" id="terminal">
+        <div class="term-line" style="opacity:1"><span class="term-prompt">$</span> <span class="term-cmd">curl -s localhost:21890/health | jq .</span></div>
+      </div>
     </div>
   </section>
 
