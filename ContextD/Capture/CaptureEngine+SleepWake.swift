@@ -90,7 +90,7 @@ extension CaptureEngine {
         logger.info("Resuming capture after delay (\(reason))")
         // Delay resume to let displays initialize
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
             self.isSleeping = false
             if self.isRunning {
                 self.state = .recording

@@ -225,7 +225,7 @@ final class CaptureEngine: ObservableObject {
             guard let self = self else { return }
             // Wait for app lifecycle to fully initialize before first capture.
             // Without this delay, the screencapture CLI may fail when launched via `open`.
-            try? await Task.sleep(for: .seconds(3))
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
             while !Task.isCancelled && self.isRunning {
                 if !self.isSleeping {
                     let cycleStart = ContinuousClock.now
@@ -234,11 +234,13 @@ final class CaptureEngine: ObservableObject {
                     let elapsed = ContinuousClock.now - cycleStart
                     let remaining = Duration.seconds(interval) - elapsed
                     if remaining > .zero {
-                        try? await Task.sleep(for: remaining)
+                        let nanos = UInt64(remaining.components.seconds) * 1_000_000_000
+                            + UInt64(remaining.components.attoseconds / 1_000_000_000)
+                        try? await Task.sleep(nanoseconds: nanos)
                     }
                 } else {
                     // While sleeping, poll infrequently instead of busy-waiting
-                    try? await Task.sleep(for: .seconds(1))
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
                 }
             }
         }

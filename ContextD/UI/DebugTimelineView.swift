@@ -56,7 +56,7 @@ struct DebugTimelineView: View {
             refresh()
             guard autoRefresh else { return }
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3))
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
                 guard !Task.isCancelled else { break }
                 refresh()
             }

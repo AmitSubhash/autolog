@@ -581,7 +581,7 @@ struct SettingsView: View {
             saveError = nil
             apiKey = "" // Clear from memory
             Task {
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
                 showApiKeySaved = false
             }
         } catch {
