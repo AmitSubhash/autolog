@@ -1,14 +1,14 @@
-# MirrorLog
+# AutoLog
 
 Your screen, understood.
 
-MirrorLog is a macOS menu bar app that watches what you do on your computer and builds a searchable activity knowledge graph from it. It captures your screen via OCR, infers what you're working on using an LLM, connects related activities across apps, and syncs everything to an Obsidian vault as linked notes.
+AutoLog is a macOS menu bar app that watches what you do on your computer and builds a searchable activity knowledge graph from it. It captures your screen via OCR, infers what you're working on using an LLM, connects related activities across apps, and syncs everything to an Obsidian vault as linked notes.
 
 Think of it as ambient memory for your workday -- not a surveillance tool, but a personal context engine that remembers what you were doing, in which apps, with which files, so you never lose track.
 
 ## What it captures
 
-Every few seconds, MirrorLog takes a screenshot, runs full-screen OCR, and extracts:
+Every few seconds, AutoLog takes a screenshot, runs full-screen OCR, and extracts:
 
 - **Screen text** -- everything visible, not just the active window
 - **App metadata** -- which app is frontmost, its window title, document path, browser URL
@@ -26,19 +26,19 @@ screenshot --> OCR --> capture record --> summarization (Haiku) --> activity inf
 
 ## The knowledge graph
 
-MirrorLog doesn't just store flat summaries. It builds structure:
+AutoLog doesn't just store flat summaries. It builds structure:
 
 **App Sessions** -- contiguous stretches of using one app, with aggregated metadata (all window titles, document paths, URLs seen during the session).
 
-**Activities** -- LLM-inferred tasks that span one or more app sessions. "Debugging the capture pipeline" might involve Terminal (building), Safari (reading docs), and Xcode (editing code) -- MirrorLog groups these into one coherent activity.
+**Activities** -- LLM-inferred tasks that span one or more app sessions. "Debugging the capture pipeline" might involve Terminal (building), Safari (reading docs), and Xcode (editing code) -- AutoLog groups these into one coherent activity.
 
-**Cross-activity links** -- activities connected by shared files, URLs, or topics. If you edited `CaptureEngine.swift` in two different sessions hours apart, MirrorLog links those activities.
+**Cross-activity links** -- activities connected by shared files, URLs, or topics. If you edited `CaptureEngine.swift` in two different sessions hours apart, AutoLog links those activities.
 
 **Entities** -- files, URLs, and topics extracted from activities, queryable independently ("show me everything involving this file").
 
 ## Obsidian integration
 
-MirrorLog syncs to an Obsidian vault with `[[wikilinks]]` so you can explore your work history in Obsidian's graph view:
+AutoLog syncs to an Obsidian vault with `[[wikilinks]]` so you can explore your work history in Obsidian's graph view:
 
 - **Activity notes** -- named by what you did, not when. Each note includes the apps used, files touched, URLs visited, and related activities.
 - **App notes** -- per-app usage stats, recent windows, files, and activities.
@@ -125,7 +125,7 @@ Set up as a launchd agent for automatic sync (plist templates in `launchd/`).
 
 ### Configuration
 
-MirrorLog uses `UserDefaults` for configuration. Key settings:
+AutoLog uses `UserDefaults` for configuration. Key settings:
 
 | Setting | Default | What it controls |
 |---------|---------|-----------------|
@@ -146,7 +146,7 @@ LLM calls go through a local `claude -p` proxy using Haiku:
 
 - All data stays local (SQLite database in `~/Library/Application Support/ContextD/`)
 - Password managers and System Settings are excluded from capture by default
-- MirrorLog's own windows are excluded from screenshots
+- AutoLog's own windows are excluded from screenshots
 - LLM calls go through your local proxy, not to a third-party API
 - Captures are pruned after 72 hours; summaries persist indefinitely
 - No telemetry, no analytics, no network calls except to your LLM proxy
