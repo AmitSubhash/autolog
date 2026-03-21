@@ -15,7 +15,10 @@ final class OpenRouterClient: LLMClient, Sendable {
 
     /// True when using a local proxy (no API key needed).
     static var isUsingProxy: Bool {
-        UserDefaults.standard.string(forKey: "llmEndpointURL") != nil
+        if let custom = UserDefaults.standard.string(forKey: "llmEndpointURL"), !custom.isEmpty {
+            return true
+        }
+        return false
     }
 
     private let logger = DualLogger(category: "OpenRouterClient")

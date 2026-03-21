@@ -44,12 +44,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 420),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 500),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
-        window.title = "Welcome to ContextD"
+        window.title = "Welcome to AutoLog"
         window.contentView = NSHostingView(rootView: onboardingView)
         window.center()
         window.isReleasedWhenClosed = false
@@ -106,7 +106,7 @@ final class DebugWindowController {
             defer: false
         )
 
-        window.title = "ContextD - Database Debug"
+        window.title = "AutoLog - Database Debug"
         window.contentView = NSHostingView(rootView: contentView)
         window.center()
         window.isReleasedWhenClosed = false
@@ -160,7 +160,7 @@ final class EnrichmentPanelController {
             defer: false
         )
 
-        panel.title = "ContextD - Enrich Prompt"
+        panel.title = "AutoLog - Enrich Prompt"
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false

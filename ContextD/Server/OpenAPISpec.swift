@@ -7,11 +7,11 @@ enum OpenAPISpec {
     {
       "openapi": "3.1.0",
       "info": {
-        "title": "ContextD API",
-        "description": "Search and browse your recent screen activity. ContextD continuously captures and summarizes what you see on screen, and this API lets you search summaries, list activity, and retrieve structured data from your captures.",
+        "title": "AutoLog API",
+        "description": "Search and browse your recent screen activity. AutoLog continuously captures and summarizes what you see on screen, and this API lets you search summaries, list activity, and retrieve structured data from your captures.",
         "version": "0.1.0",
         "contact": {
-          "name": "ContextD"
+          "name": "AutoLog"
         },
         "license": {
           "name": "MIT"
@@ -20,7 +20,7 @@ enum OpenAPISpec {
       "servers": [
         {
           "url": "http://127.0.0.1:21890",
-          "description": "Local ContextD instance"
+          "description": "Local AutoLog instance"
         }
       ],
       "paths": {
@@ -300,7 +300,7 @@ enum OpenAPISpec {
           "get": {
             "operationId": "healthCheck",
             "summary": "Health check",
-            "description": "Returns the current status of the ContextD API server and basic database statistics.",
+            "description": "Returns the current status of the AutoLog API server and basic database statistics.",
             "responses": {
               "200": {
                 "description": "Server is healthy",

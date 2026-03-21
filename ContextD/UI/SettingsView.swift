@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Settings window for ContextD configuration.
+/// Settings window for AutoLog configuration.
 struct SettingsView: View {
 
     // MARK: - Defaults
@@ -34,7 +34,18 @@ struct SettingsView: View {
         static let summarizationMaxDeltaTextLength = 300
     }
 
-    // API Settings
+    // LLM Provider Settings
+    enum LLMProvider: String, CaseIterable, Identifiable {
+        case proxy = "Local Proxy (claude -p)"
+        case openrouter = "OpenRouter API"
+        var id: String { rawValue }
+    }
+
+    @AppStorage("llmEndpointURL") private var customEndpointURL: String = ""
+    @State private var selectedProvider: LLMProvider = .openrouter
+    @State private var proxyURL: String = "http://127.0.0.1:11434/v1/chat/completions"
+    @State private var proxyTestResult: String?
+    @State private var proxyTesting: Bool = false
     @State private var apiKey: String = ""
     @State private var hasApiKey: Bool = false
     @AppStorage("summarizationModel") private var summarizationModel: String = Defaults.summarizationModel
@@ -134,6 +145,13 @@ struct SettingsView: View {
         .frame(width: 580, height: 500)
         .onAppear {
             hasApiKey = OpenRouterClient.hasAPIKey()
+            // Detect current provider from stored endpoint URL
+            if customEndpointURL.isEmpty {
+                selectedProvider = .openrouter
+            } else {
+                selectedProvider = .proxy
+                proxyURL = customEndpointURL
+            }
         }
     }
 
@@ -141,34 +159,32 @@ struct SettingsView: View {
 
     private var generalTab: some View {
         Form {
-            Section("API Key") {
-                HStack {
-                    SecureField("OpenRouter API Key", text: $apiKey)
-                        .textFieldStyle(.roundedBorder)
-
-                    Button(action: saveApiKey) {
-                        Text(showApiKeySaved ? "Saved!" : "Save")
-                    }
-                    .disabled(apiKey.isEmpty)
-                }
-
-                if let error = saveError {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
+            Section("LLM Provider") {
+                Picker("Provider:", selection: $selectedProvider) {
+                    ForEach(LLMProvider.allCases) { provider in
+                        Text(provider.rawValue).tag(provider)
                     }
                 }
+                .pickerStyle(.segmented)
 
-                if hasApiKey {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                        Text("API key is configured")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                if selectedProvider == .proxy {
+                    proxySettingsView
+
+                    Button("Apply Proxy") {
+                        applyLLMProvider(.proxy)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(proxyURL.isEmpty)
+                } else {
+                    apiKeySettingsView
+
+                    if customEndpointURL != "" {
+                        Button("Switch to OpenRouter") {
+                            applyLLMProvider(.openrouter)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
                     }
                 }
             }
@@ -251,6 +267,113 @@ struct SettingsView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - LLM Provider Views
+
+    private var proxySettingsView: some View {
+        Group {
+            HStack {
+                TextField("Proxy URL", text: $proxyURL)
+                    .textFieldStyle(.roundedBorder)
+
+                Button(proxyTesting ? "Testing..." : "Test") {
+                    testProxyConnection()
+                }
+                .disabled(proxyURL.isEmpty || proxyTesting)
+            }
+
+            Text("Run `claude -p` to start a local proxy, then point AutoLog at it.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let result = proxyTestResult {
+                HStack {
+                    Image(systemName: result.starts(with: "OK") ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundStyle(result.starts(with: "OK") ? .green : .red)
+                    Text(result)
+                        .font(.caption)
+                        .foregroundStyle(result.starts(with: "OK") ? .green : .red)
+                }
+            }
+        }
+    }
+
+    private var apiKeySettingsView: some View {
+        Group {
+            HStack {
+                SecureField("OpenRouter API Key", text: $apiKey)
+                    .textFieldStyle(.roundedBorder)
+
+                Button(action: saveApiKey) {
+                    Text(showApiKeySaved ? "Saved!" : "Save")
+                }
+                .disabled(apiKey.isEmpty)
+            }
+
+            if let error = saveError {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            if hasApiKey {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text("API key is configured")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func applyLLMProvider(_ provider: LLMProvider) {
+        switch provider {
+        case .proxy:
+            customEndpointURL = proxyURL
+        case .openrouter:
+            customEndpointURL = ""
+        }
+    }
+
+    private func testProxyConnection() {
+        guard let url = URL(string: proxyURL) else {
+            proxyTestResult = "Invalid URL"
+            return
+        }
+        proxyTesting = true
+        proxyTestResult = nil
+
+        Task {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.timeoutInterval = 5
+            let body: [String: Any] = [
+                "model": "anthropic/claude-haiku-4-5",
+                "max_tokens": 1,
+                "messages": [["role": "user", "content": "ping"]],
+            ]
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+            do {
+                let (_, response) = try await URLSession.shared.data(for: request)
+                if let http = response as? HTTPURLResponse, (200...499).contains(http.statusCode) {
+                    proxyTestResult = "OK - proxy is reachable (HTTP \(http.statusCode))"
+                } else {
+                    proxyTestResult = "Unexpected response"
+                }
+            } catch {
+                proxyTestResult = "Connection failed: \(error.localizedDescription)"
+            }
+            proxyTesting = false
         }
     }
 

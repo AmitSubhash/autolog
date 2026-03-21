@@ -21,11 +21,11 @@ extension StorageManager {
         return record
     }
 
-    /// Insert an activity-session join record.
+    /// Insert an activity-session join record, ignoring duplicates.
     func insertActivitySession(_ record: ActivitySessionRecord) throws {
         var rec = record
         try database.dbPool.write { db in
-            try rec.insert(db)
+            try rec.insert(db, onConflict: .ignore)
         }
     }
 

@@ -8,7 +8,7 @@ enum ScalarDocsPage {
         <!DOCTYPE html>
         <html>
         <head>
-            <title>ContextD API Docs</title>
+            <title>AutoLog API Docs</title>
             <meta charset="utf-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1" />
             <style>
