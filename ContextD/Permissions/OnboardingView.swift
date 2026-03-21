@@ -77,13 +77,12 @@ struct OnboardingView: View {
                     step = .llmSetup
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!permissionManager.allPermissionsGranted)
             }
 
             if !permissionManager.allPermissionsGranted {
-                Text("Grant both permissions above to continue. You may need to restart the app after granting permissions.")
+                Text("Permissions may show as not granted after toggling. If you've enabled them in System Settings, click Next to continue.")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
         }
