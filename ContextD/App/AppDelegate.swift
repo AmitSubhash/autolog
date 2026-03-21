@@ -19,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let hasOnboarded = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
         let permissionsOK = PermissionManager.shared.allPermissionsGranted
 
-        if !hasOnboarded && !permissionsOK {
+        if !hasOnboarded {
             logger.info("First launch - opening onboarding window")
             showOnboardingWindow()
         } else {
