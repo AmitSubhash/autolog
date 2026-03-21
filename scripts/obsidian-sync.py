@@ -1,30 +1,49 @@
-"""Sync contextd summaries to an Obsidian vault with wikilinks.
+"""Sync contextd activity data to an Obsidian vault with wikilinks.
 
-Reads summaries from the contextd API, writes Activity/App/Topic/Daily
-notes with [[wikilinks]] so Obsidian's graph view visualizes connections.
+Fetches from the contextd API (activities, sessions, app-usage, graph)
+and writes Activity/App/Topic/Daily notes with [[wikilinks]] so that
+Obsidian's graph view visualizes the connections.
+
+Falls back to the legacy /v1/summaries endpoint if new endpoints fail.
 """
 from __future__ import annotations
 
 import json
 import logging
-import re
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
+
+from obsidian_helpers import (
+    build_activity_note,
+    build_app_note,
+    build_daily_note,
+    build_topic_note,
+    sanitize_name,
+    slugify,
+)
+from obsidian_legacy import run_legacy_sync
 
 CONTEXTD_URL = "http://127.0.0.1:21890"
 AUTH_TOKEN_PATH = Path.home() / ".config" / "contextd" / "auth_token"
 VAULT_PATH = Path.home() / "Documents" / "contextd-vault"
 HTTP_TIMEOUT = 15
 DEFAULT_HOURS = 2
+MAX_FILENAME_LEN = 80
 
 logger = logging.getLogger("obsidian-sync")
 logging.basicConfig(
-    stream=sys.stderr, level=logging.INFO,
+    stream=sys.stderr,
+    level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
 )
+
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
 
 
 def read_auth_token() -> str:
@@ -36,116 +55,180 @@ def read_auth_token() -> str:
         return ""
 
 
-def fetch_summaries(token: str, hours: int = DEFAULT_HOURS) -> list[dict]:
-    """Fetch recent summaries from the contextd API."""
-    url = f"{CONTEXTD_URL}/v1/summaries?minutes={hours * 60}&limit=200"
+# ---------------------------------------------------------------------------
+# API fetchers
+# ---------------------------------------------------------------------------
+
+
+def _api_get(token: str, path: str) -> dict | list | None:
+    """GET from the contextd API. Returns None on any error."""
+    url = f"{CONTEXTD_URL}{path}"
     req = urllib.request.Request(url, method="GET")
     req.add_header("Authorization", f"Bearer {token}")
     try:
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
-            data = json.loads(resp.read().decode())
-    except (urllib.error.URLError, OSError) as exc:
-        logger.error("contextd unreachable: %s", exc)
-        return []
-    if isinstance(data, list):
-        return data
-    return data.get("summaries", data.get("data", []))
+            return json.loads(resp.read().decode())
+    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+        logger.warning("API GET %s failed: %s", path, exc)
+        return None
 
 
-def sanitize(name: str) -> str:
-    """Strip special chars, collapse whitespace, title-case, cap at 60."""
-    cleaned = re.sub(r"\s+", " ", re.sub(r"[^\w\s\-.]", "", name)).strip()
-    return cleaned[:60].title() if cleaned else "Unknown"
+def fetch_activities(token: str, hours: int) -> list[dict]:
+    """Fetch inferred activities from GET /v1/activities."""
+    data = _api_get(token, f"/v1/activities?minutes={hours * 60}&limit=200")
+    if isinstance(data, dict):
+        return data.get("activities", [])
+    return []
 
 
-def parse_ts(ts: str) -> datetime | None:
-    """Parse ISO 8601 timestamp to local naive datetime, or None."""
-    for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S%z"):
+def fetch_activity_sessions(token: str, activity_id: int) -> list[dict]:
+    """Fetch sessions for a specific activity."""
+    data = _api_get(token, f"/v1/activities/{activity_id}/sessions")
+    return data.get("sessions", []) if isinstance(data, dict) else []
+
+
+def fetch_related(token: str, activity_id: int) -> list[dict]:
+    """Fetch related activities for a specific activity."""
+    data = _api_get(token, f"/v1/activities/{activity_id}/related?limit=5")
+    return data.get("activities", []) if isinstance(data, dict) else []
+
+
+def fetch_app_usage(token: str, hours: int) -> list[dict]:
+    """Fetch app usage summary from GET /v1/app-usage."""
+    data = _api_get(token, f"/v1/app-usage?minutes={hours * 60}")
+    return data.get("usage", []) if isinstance(data, dict) else []
+
+
+def fetch_summaries_legacy(token: str, hours: int) -> list[dict]:
+    """Fetch summaries from the legacy GET /v1/summaries endpoint."""
+    data = _api_get(token, f"/v1/summaries?minutes={hours * 60}&limit=200")
+    if isinstance(data, dict):
+        return data.get("summaries", data.get("data", []))
+    return data if isinstance(data, list) else []
+
+
+# ---------------------------------------------------------------------------
+# Note writers
+# ---------------------------------------------------------------------------
+
+
+def _activity_filename(name: str) -> str:
+    """Build filename from activity name only (no date prefix)."""
+    slug = slugify(name, max_length=MAX_FILENAME_LEN - 3)
+    return f"{slug}.md"
+
+
+def write_activity_notes(
+    token: str,
+    activities: list[dict],
+) -> tuple[int, dict[str, list[str]], dict[str, dict]]:
+    """Write Activity notes; return (count, topic_map, app_data_map)."""
+    topic_map: dict[str, list[str]] = {}
+    app_data: dict[str, dict] = {}
+    written = 0
+
+    for activity in activities:
+        activity_id = activity.get("id", 0)
+        name = activity.get("name", "Unknown Activity")
+        confidence = activity.get("confidence", 0.0)
+
+        # Skip low-confidence fallback activities
+        if confidence < 0.6:
+            logger.debug("Skipping low-confidence activity: %s (%.2f)", name, confidence)
+            continue
+
+        sessions = fetch_activity_sessions(token, activity_id)
+        related = fetch_related(token, activity_id)
+
+        fname = _activity_filename(name)
+        fpath = VAULT_PATH / "Activities" / fname
+        content = build_activity_note(activity, sessions, related)
+        fpath.write_text(content, encoding="utf-8")
+        written += 1
+
+        # Track topic -> activity names
+        for topic in activity.get("key_topics", []):
+            clean = sanitize_name(topic)
+            topic_map.setdefault(clean, []).append(name)
+
+        # Track app -> activity names, files, and window titles
+        for session in sessions:
+            app_name = session.get("app_name", "Unknown")
+            entry = app_data.setdefault(
+                app_name, {"activities": [], "files": [], "window_titles": []}
+            )
+            if name not in entry["activities"]:
+                entry["activities"].append(name)
+            for path in session.get("document_paths", []):
+                if path not in entry["files"]:
+                    entry["files"].append(path)
+            for title in session.get("window_titles", []):
+                if title and title not in entry["window_titles"]:
+                    entry["window_titles"].append(title)
+
+    return written, topic_map, app_data
+
+
+def write_app_notes(
+    app_usage: list[dict],
+    app_data: dict[str, dict],
+) -> int:
+    """Write or update App notes. Returns count written."""
+    written = 0
+    for entry in app_usage:
+        app_name = entry.get("app_name", "Unknown")
+        extra = app_data.get(app_name, {"activities": [], "files": [], "window_titles": []})
+        content = build_app_note(
+            app_name=app_name,
+            total_seconds=entry.get("total_seconds", 0),
+            session_count=entry.get("session_count", 0),
+            recent_files=extra.get("files", []),
+            recent_activities=extra.get("activities", []),
+            window_titles=extra.get("window_titles", []),
+        )
+        fpath = VAULT_PATH / "Apps" / f"{sanitize_name(app_name)}.md"
+        fpath.write_text(content, encoding="utf-8")
+        written += 1
+    return written
+
+
+def write_topic_notes(topic_map: dict[str, list[str]]) -> int:
+    """Write or update Topic notes. Returns count written."""
+    written = 0
+    for topic_name, act_names in topic_map.items():
+        content = build_topic_note(topic_name, act_names)
+        fpath = VAULT_PATH / "Topics" / f"{topic_name}.md"
+        fpath.write_text(content, encoding="utf-8")
+        written += 1
+    return written
+
+
+def write_daily_notes(
+    activities: list[dict], app_usage: list[dict],
+) -> int:
+    """Write Daily notes grouped by date. Returns count written."""
+    by_date: dict[str, list[dict]] = {}
+    for act in activities:
+        date_key = act.get("start_timestamp", "")[:10]
+        if date_key:
+            by_date.setdefault(date_key, []).append(act)
+
+    written = 0
+    for date_str, day_acts in by_date.items():
         try:
-            dt = datetime.strptime(ts, fmt)
-            if dt.tzinfo is not None:
-                dt = dt.astimezone().replace(tzinfo=None)
-            return dt
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
         except ValueError:
             continue
-    return None
+        content = build_daily_note(date_obj, app_usage, day_acts)
+        fpath = VAULT_PATH / "Daily" / f"{date_str}.md"
+        fpath.write_text(content, encoding="utf-8")
+        written += 1
+    return written
 
 
-def round_to_window(dt: datetime, window_min: int = 15) -> datetime:
-    """Round datetime down to the nearest N-minute boundary."""
-    return dt.replace(minute=(dt.minute // window_min) * window_min, second=0, microsecond=0)
-
-
-def _dedup(items: list[str]) -> list[str]:
-    """Deduplicate preserving insertion order."""
-    seen: set[str] = set()
-    return [x for x in items if x not in seen and not seen.add(x)]
-
-
-def write_activity_note(window_start: datetime, summaries: list[dict]) -> bool:
-    """Write an Activity note for a 15-min window. Skip if file exists."""
-    fname = window_start.strftime("%Y-%m-%d_%H-%M")
-    fpath = VAULT_PATH / "Activities" / f"{fname}.md"
-    if fpath.exists():
-        return False
-
-    start_str = window_start.strftime("%H:%M")
-    end_str = (window_start + timedelta(minutes=15)).strftime("%H:%M")
-
-    all_apps: list[str] = []
-    all_topics: list[str] = []
-    text_parts: list[str] = []
-    for s in summaries:
-        apps = [sanitize(a) for a in s.get("app_names", [])]
-        topics = [sanitize(t) for t in s.get("key_topics", [])]
-        all_apps.extend(apps)
-        all_topics.extend(topics)
-        text = s.get("summary", "").strip()
-        if text:
-            for name in apps + topics:
-                text = re.compile(re.escape(name), re.IGNORECASE).sub(
-                    f"[[{name}]]", text, count=1)
-            text_parts.append(text)
-
-    apps = _dedup(all_apps)
-    topics = _dedup(all_topics)
-    lines = [
-        "---",
-        f"date: {window_start.strftime('%Y-%m-%dT%H:%M:%S')}",
-        f"apps: [{', '.join(apps)}]",
-        f"topics: [{', '.join(topics)}]",
-        "---", "", f"# {start_str} - {end_str}", "",
-    ]
-    if text_parts:
-        lines.extend(text_parts + [""])
-    if apps:
-        lines.extend(["## Apps"] + [f"- [[{a}]]" for a in apps] + [""])
-    if topics:
-        lines.extend(["## Topics"] + [f"- [[{t}]]" for t in topics] + [""])
-
-    fpath.write_text("\n".join(lines), encoding="utf-8")
-    return True
-
-
-def ensure_stub(folder: str, name: str, note_type: str) -> None:
-    """Create a stub App or Topic note if it does not exist."""
-    fpath = VAULT_PATH / folder / f"{name}.md"
-    if not fpath.exists():
-        fpath.write_text(
-            f"---\ntype: {note_type}\n---\n\n# {name}\n\n"
-            f"Activities mentioning this {note_type} are linked via backlinks.\n",
-            encoding="utf-8",
-        )
-
-
-def update_daily_note(date: datetime, filenames: list[str]) -> None:
-    """Create or overwrite the Daily overview note for a given date."""
-    ds = date.strftime("%Y-%m-%d")
-    lines = [
-        "---", f"date: {ds}", "---", "",
-        f"# {date.strftime('%B %d, %Y')}", "", "## Activities",
-    ] + [f"- [[{n}]]" for n in sorted(set(filenames))] + [""]
-    (VAULT_PATH / "Daily" / f"{ds}.md").write_text("\n".join(lines), encoding="utf-8")
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 
 def main() -> None:
@@ -166,42 +249,25 @@ def main() -> None:
         logger.error("No auth token found, aborting")
         sys.exit(1)
 
-    summaries = fetch_summaries(token, hours=hours)
-    if not summaries:
-        logger.warning("No summaries returned, nothing to sync")
+    # Try new activities endpoint; fall back to legacy summaries
+    activities = fetch_activities(token, hours)
+    if not activities:
+        logger.warning("New API returned no activities, trying legacy sync")
+        summaries = fetch_summaries_legacy(token, hours)
+        run_legacy_sync(summaries)
         return
-    logger.info("Fetched %d summaries", len(summaries))
 
-    # Group summaries into 15-min windows
-    windows: dict[datetime, list[dict]] = {}
-    for s in summaries:
-        dt = parse_ts(s.get("start_timestamp", s.get("timestamp", "")))
-        if dt:
-            windows.setdefault(round_to_window(dt), []).append(s)
+    logger.info("Fetched %d activities", len(activities))
 
-    written = 0
-    all_apps: set[str] = set()
-    all_topics: set[str] = set()
-    daily: dict[str, list[str]] = {}
-
-    for ws, ws_summaries in sorted(windows.items()):
-        if write_activity_note(ws, ws_summaries):
-            written += 1
-        daily.setdefault(ws.strftime("%Y-%m-%d"), []).append(ws.strftime("%Y-%m-%d_%H-%M"))
-        for s in ws_summaries:
-            all_apps.update(sanitize(a) for a in s.get("app_names", []))
-            all_topics.update(sanitize(t) for t in s.get("key_topics", []))
-
-    for app in sorted(all_apps):
-        ensure_stub("Apps", app, "app")
-    for topic in sorted(all_topics):
-        ensure_stub("Topics", topic, "topic")
-    for ds, fnames in daily.items():
-        update_daily_note(datetime.strptime(ds, "%Y-%m-%d"), fnames)
+    act_count, topic_map, app_data = write_activity_notes(token, activities)
+    app_usage = fetch_app_usage(token, hours)
+    app_count = write_app_notes(app_usage, app_data)
+    topic_count = write_topic_notes(topic_map)
+    daily_count = write_daily_notes(activities, app_usage)
 
     logger.info(
-        "Done: %d new activities, %d apps, %d topics, %d daily notes",
-        written, len(all_apps), len(all_topics), len(daily),
+        "Done: %d activities, %d apps, %d topics, %d daily notes",
+        act_count, app_count, topic_count, daily_count,
     )
 
 

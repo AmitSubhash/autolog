@@ -1,0 +1,71 @@
+{
+  "app": "Brave Browser",
+  "bundle_id": "com.brave.Browser",
+  "window_title": "Restoring brain-to-text communication in a person with dysarthria from pontine stroke using an intracortical brain-computer interface - Brave",
+  "document_path": "https://www.medrxiv.org/content/10.64898/2026.02.19.26346583v1.full.pdf",
+  "browser_url": null,
+  "focused_role": null,
+  "visible_windows": [
+    {
+      "appName": "Finder",
+      "windowTitle": "contextd"
+    },
+    {
+      "appName": "Calendar"
+    },
+    {
+      "appName": "Safari",
+      "windowTitle": "CV \u2014 (4) Post | Feed | LinkedIn"
+    },
+    {
+      "appName": "Messages"
+    },
+    {
+      "appName": "Preview"
+    },
+    {
+      "appName": "Terminal",
+      "windowTitle": "amit \u2014 \u2810 Claude Code \u2014 caffeinate \u25c2 claude \u2014 134\u00d739"
+    },
+    {
+      "appName": "Windows App"
+    },
+    {
+      "appName": "Code"
+    },
+    {
+      "appName": "Slack"
+    },
+    {
+      "appName": "Emacs",
+      "windowTitle": "*claude-code[Downloads]* \u2013 Doom Emacs"
+    },
+    {
+      "appName": "TextEdit"
+    },
+    {
+      "appName": "Brave Browser",
+      "windowTitle": "Restoring brain-to-text communication in a person with dysarthria from pontine stroke using an intracortical brain-computer interface - Brave"
+    },
+    {
+      "appName": "Google Chrome"
+    },
+    {
+      "appName": "QuickTime Player"
+    },
+    {
+      "appName": "Keynote"
+    },
+    {
+      "appName": "iTerm2",
+      "windowTitle": "/bin/bash"
+    },
+    {
+      "appName": "Obsidian"
+    },
+    {
+      "appName": "Claude",
+      "windowTitle": "Claude"
+    }
+  ]
+}

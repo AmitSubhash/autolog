@@ -13,14 +13,14 @@ final class AppDatabase: Sendable {
     init() throws {
         let dbPath = try AppDatabase.databasePath()
         dbPool = try DatabasePool(path: dbPath, configuration: AppDatabase.makeConfiguration())
-        try migrator.migrate(dbPool)
+        try Self.buildMigrator().migrate(dbPool)
         AppDatabase.logger.info("Database initialized at \(dbPath)")
     }
 
     /// Initialize with a custom path (for testing).
     init(path: String) throws {
         dbPool = try DatabasePool(path: path, configuration: AppDatabase.makeConfiguration())
-        try migrator.migrate(dbPool)
+        try Self.buildMigrator().migrate(dbPool)
     }
 
     // MARK: - Configuration
@@ -53,7 +53,7 @@ final class AppDatabase: Sendable {
 
     // MARK: - Migrations
 
-    private var migrator: DatabaseMigrator {
+    private static func buildMigrator() -> DatabaseMigrator {
         var migrator = DatabaseMigrator()
 
         // Only erase in unit tests, never in app builds.
@@ -215,6 +215,148 @@ final class AppDatabase: Sendable {
             // of existing summaries.
             try db.alter(table: "summaries") { t in
                 t.add(column: "embedding", .blob)
+            }
+        }
+
+        migrator.registerMigration("v5_addEnhancedMetadata") { db in
+            try db.alter(table: "captures") { t in
+                t.add(column: "documentPath", .text)
+                t.add(column: "browserURL", .text)
+                t.add(column: "focusedElementRole", .text)
+            }
+            // Partial indexes: only index non-null values (most captures will be null)
+            try db.execute(sql: """
+                CREATE INDEX idx_captures_document ON captures(documentPath)
+                WHERE documentPath IS NOT NULL
+                """)
+            try db.execute(sql: """
+                CREATE INDEX idx_captures_url ON captures(browserURL)
+                WHERE browserURL IS NOT NULL
+                """)
+        }
+
+        migrator.registerMigration("v6_createAppSessions") { db in
+            try db.create(table: "app_sessions") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("appName", .text).notNull()
+                t.column("appBundleID", .text)
+                t.column("startTimestamp", .double).notNull()
+                t.column("endTimestamp", .double).notNull()
+                t.column("captureCount", .integer).notNull().defaults(to: 0)
+                t.column("windowTitles", .text)      // JSON array
+                t.column("documentPaths", .text)     // JSON array
+                t.column("browserURLs", .text)       // JSON array
+                t.column("activityId", .integer)     // FK to activities (Phase 3)
+                t.column("activityInferred", .boolean).notNull().defaults(to: false)
+            }
+            try db.create(index: "idx_app_sessions_time",
+                          on: "app_sessions", columns: ["startTimestamp", "endTimestamp"])
+            try db.create(index: "idx_app_sessions_app",
+                          on: "app_sessions", columns: ["appBundleID"])
+        }
+
+        migrator.registerMigration("v7_createActivities") { db in
+            try db.create(table: "activities") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("name", .text).notNull()
+                t.column("description", .text)
+                t.column("startTimestamp", .double).notNull()
+                t.column("endTimestamp", .double).notNull()
+                t.column("keyTopics", .text)         // JSON array
+                t.column("documentPaths", .text)     // JSON array
+                t.column("browserURLs", .text)       // JSON array
+                t.column("confidence", .double).notNull().defaults(to: 0.8)
+                t.column("isActive", .boolean).notNull().defaults(to: true)
+                t.column("parentActivityId", .integer)
+                    .references("activities", onDelete: .setNull)
+            }
+            try db.create(index: "idx_activities_time",
+                          on: "activities", columns: ["startTimestamp", "endTimestamp"])
+            try db.create(index: "idx_activities_active",
+                          on: "activities", columns: ["isActive"])
+
+            try db.create(table: "activity_sessions") { t in
+                t.column("activityId", .integer).notNull()
+                    .references("activities", onDelete: .cascade)
+                t.column("sessionId", .integer).notNull()
+                    .references("app_sessions", onDelete: .cascade)
+                t.primaryKey(["activityId", "sessionId"])
+            }
+        }
+
+        migrator.registerMigration("v8_createActivityGraph") { db in
+            try db.create(table: "activity_entities") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("activityId", .integer).notNull()
+                    .references("activities", onDelete: .cascade)
+                t.column("entityType", .text).notNull()  // file, url, topic, project
+                t.column("entityValue", .text).notNull()
+            }
+            try db.create(index: "idx_activity_entities_value",
+                          on: "activity_entities", columns: ["entityType", "entityValue"])
+            try db.create(index: "idx_activity_entities_activity",
+                          on: "activity_entities", columns: ["activityId"])
+
+            try db.create(table: "activity_links") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("sourceActivityId", .integer).notNull()
+                    .references("activities", onDelete: .cascade)
+                t.column("targetActivityId", .integer).notNull()
+                    .references("activities", onDelete: .cascade)
+                t.column("linkType", .text).notNull()  // shared_file, shared_url, shared_topic, llm_inferred
+                t.column("weight", .double).notNull().defaults(to: 1.0)
+                t.column("sharedEntity", .text)
+                t.column("createdAt", .double).notNull()
+            }
+            try db.create(index: "idx_activity_links_source",
+                          on: "activity_links", columns: ["sourceActivityId"])
+            try db.create(index: "idx_activity_links_target",
+                          on: "activity_links", columns: ["targetActivityId"])
+        }
+
+        migrator.registerMigration("v9_createActivitiesFTS") { db in
+            try db.execute(sql: """
+                CREATE VIRTUAL TABLE activities_fts USING fts5(
+                    name,
+                    description,
+                    keyTopics,
+                    content=activities,
+                    content_rowid=id,
+                    tokenize='porter unicode61'
+                )
+                """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER activities_ai AFTER INSERT ON activities BEGIN
+                    INSERT INTO activities_fts(rowid, name, description, keyTopics)
+                    VALUES (new.id, new.name, new.description, new.keyTopics);
+                END
+                """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER activities_ad AFTER DELETE ON activities BEGIN
+                    INSERT INTO activities_fts(activities_fts, rowid, name, description, keyTopics)
+                    VALUES ('delete', old.id, old.name, old.description, old.keyTopics);
+                END
+                """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER activities_au AFTER UPDATE ON activities BEGIN
+                    INSERT INTO activities_fts(activities_fts, rowid, name, description, keyTopics)
+                    VALUES ('delete', old.id, old.name, old.description, old.keyTopics);
+                    INSERT INTO activities_fts(rowid, name, description, keyTopics)
+                    VALUES (new.id, new.name, new.description, new.keyTopics);
+                END
+                """)
+        }
+
+        migrator.registerMigration("v10_enrichSummaries") { db in
+            // Store structured metadata extracted by the LLM alongside summaries.
+            // Survives capture pruning so historical queries retain file/URL context.
+            try db.alter(table: "summaries") { t in
+                t.add(column: "documentPaths", .text)   // JSON array of file paths
+                t.add(column: "browserURLs", .text)     // JSON array of URLs visited
+                t.add(column: "activityType", .text)    // coding, research, communication, etc.
             }
         }
 

@@ -298,6 +298,16 @@ bundle: build ## Create a .app bundle (needed for proper permission prompts)
 	@mkdir -p "$(APP_BUNDLE)/Contents/Resources"
 	@cp $(DEBUG_BIN) "$(APP_BUNDLE)/Contents/MacOS/$(PRODUCT)"
 	@./scripts/gen-info-plist.sh > "$(APP_BUNDLE)/Contents/Info.plist"
+	@if [ -f Resources/contextd.icns ]; then \
+		cp Resources/contextd.icns "$(APP_BUNDLE)/Contents/Resources/contextd.icns"; \
+		echo "  $(GREEN)Icon installed$(RESET)"; \
+	fi
+	@if security find-identity -v -p codesigning 2>/dev/null | grep -q "ContextD Dev"; then \
+		codesign --force --deep --sign "ContextD Dev" \
+			--entitlements Resources/ContextD.entitlements \
+			"$(APP_BUNDLE)" 2>/dev/null; \
+		echo "  $(GREEN)Signed with ContextD Dev + entitlements$(RESET)"; \
+	fi
 	@echo "$(GREEN)App bundle created: $(APP_BUNDLE)$(RESET)"
 	@echo "Run with: open $(APP_BUNDLE)"
 

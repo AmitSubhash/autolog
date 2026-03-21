@@ -5,6 +5,7 @@ import AppKit
 /// and list of visible windows. Uses AXUIElement API and CGWindowList.
 final class AccessibilityReader: Sendable {
     private let logger = DualLogger(category: "Accessibility")
+    private let metadataReader = AppMetadataReader()
 
     /// Metadata about the current screen state.
     struct ScreenMetadata: Sendable {
@@ -12,6 +13,9 @@ final class AccessibilityReader: Sendable {
         let appBundleID: String?
         let windowTitle: String?
         let visibleWindows: [VisibleWindow]
+        let documentPath: String?
+        let browserURL: String?
+        let focusedElementRole: String?
     }
 
     /// Read current screen metadata. Safe to call from any thread.
@@ -23,12 +27,16 @@ final class AccessibilityReader: Sendable {
         let appBundleID = frontmostApp?.bundleIdentifier
         let windowTitle = getWindowTitle(for: frontmostApp)
         let visibleWindows = getVisibleWindows()
+        let enhanced = metadataReader.readEnhancedMetadata(for: frontmostApp)
 
         return ScreenMetadata(
             appName: appName,
             appBundleID: appBundleID,
             windowTitle: windowTitle,
-            visibleWindows: visibleWindows
+            visibleWindows: visibleWindows,
+            documentPath: enhanced.documentPath,
+            browserURL: enhanced.browserURL,
+            focusedElementRole: enhanced.focusedElementRole
         )
     }
 
@@ -71,31 +79,40 @@ final class AccessibilityReader: Sendable {
         return title
     }
 
-    /// Get a list of all visible windows using CGWindowListCopyWindowInfo.
+    /// Get a list of visible windows using NSWorkspace + AXUIElement.
+    /// Avoids CGWindowListCopyWindowInfo which triggers Screen Recording prompts
+    /// on macOS Sequoia when reading window titles from other apps.
+    @MainActor
     private func getVisibleWindows() -> [VisibleWindow] {
-        guard let windowList = CGWindowListCopyWindowInfo(
-            [.optionOnScreenOnly, .excludeDesktopElements],
-            kCGNullWindowID
-        ) as? [[String: Any]] else {
-            return []
-        }
-
         var windows: [VisibleWindow] = []
 
-        for windowInfo in windowList {
-            // Only include normal windows (layer 0)
-            guard let layer = windowInfo[kCGWindowLayer as String] as? Int, layer == 0 else {
-                continue
+        for app in NSWorkspace.shared.runningApplications {
+            guard app.activationPolicy == .regular,
+                  !app.isHidden,
+                  let name = app.localizedName else { continue }
+
+            // Use Accessibility API to get main window title (already permitted)
+            var title: String?
+            if AXIsProcessTrusted() {
+                let axApp = AXUIElementCreateApplication(app.processIdentifier)
+                // Set timeout BEFORE first AX call to avoid blocking on hung apps
+                AXUIElementSetMessagingTimeout(axApp, 0.1)
+                var windowValue: AnyObject?
+                if AXUIElementCopyAttributeValue(
+                    axApp, kAXMainWindowAttribute as CFString, &windowValue
+                ) == .success,
+                   CFGetTypeID(windowValue as CFTypeRef) == AXUIElementGetTypeID() {
+                    var titleValue: AnyObject?
+                    let axWin = windowValue as! AXUIElement
+                    if AXUIElementCopyAttributeValue(
+                        axWin, kAXTitleAttribute as CFString, &titleValue
+                    ) == .success {
+                        title = titleValue as? String
+                    }
+                }
             }
 
-            guard let ownerName = windowInfo[kCGWindowOwnerName as String] as? String else {
-                continue
-            }
-
-            // Window name requires Screen Recording permission on macOS 10.15+
-            let windowName = windowInfo[kCGWindowName as String] as? String
-
-            windows.append(VisibleWindow(appName: ownerName, windowTitle: windowName))
+            windows.append(VisibleWindow(appName: name, windowTitle: title))
         }
 
         return windows

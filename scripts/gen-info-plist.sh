@@ -32,6 +32,8 @@ cat <<'EOF'
     <true/>
     <key>NSScreenCaptureUsageDescription</key>
     <string>ContextD captures screenshots to build a searchable timeline of your computer activity for LLM context enrichment.</string>
+    <key>CFBundleIconFile</key>
+    <string>contextd</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>

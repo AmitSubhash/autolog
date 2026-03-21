@@ -16,6 +16,9 @@ extension APIServer {
         registerSemanticSearchRoute(on: router, storage: storage, log: log)
         registerSummariesRoute(on: router, storage: storage, log: log)
         registerActivityRoute(on: router, storage: storage, log: log)
+        registerSessionsRoute(on: router, storage: storage, log: log)
+        registerAppUsageRoute(on: router, storage: storage, log: log)
+        registerInferredActivitiesRoutes(on: router, storage: storage, log: log)
         registerDocsRoutes(on: router)
     }
 

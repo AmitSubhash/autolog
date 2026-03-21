@@ -180,8 +180,92 @@ struct SemanticSearchMetadata: Codable, Sendable {
     let summaries_compared: Int
 }
 
+// MARK: - Sessions Endpoint
+
+/// A single app session entry.
+struct SessionItem: Codable, Sendable {
+    let id: Int64
+    let app_name: String
+    let app_bundle_id: String?
+    let start_timestamp: String
+    let end_timestamp: String
+    let capture_count: Int
+    let window_titles: [String]
+    let document_paths: [String]
+    let browser_urls: [String]
+}
+
+/// Response body for GET /v1/sessions
+struct SessionsResponse: Codable, Sendable {
+    let sessions: [SessionItem]
+    let time_range_minutes: Int
+    let total: Int
+}
+
+// MARK: - App Usage Endpoint
+
+/// A single app usage aggregation entry.
+struct AppUsageItem: Codable, Sendable {
+    let app_name: String
+    let total_seconds: Double
+    let session_count: Int
+}
+
+/// Response body for GET /v1/app-usage
+struct AppUsageResponse: Codable, Sendable {
+    let usage: [AppUsageItem]
+    let time_range_minutes: Int
+}
+
 /// Error response body.
 struct APIErrorResponse: Codable, Sendable {
     let error: String
     let detail: String?
+}
+
+// MARK: - Inferred Activities Endpoint
+
+/// A single inferred activity entry (distinct from ActivityItem used by /v1/activity).
+struct InferredActivityItem: Codable, Sendable {
+    let id: Int64
+    let name: String
+    let description: String?
+    let start_timestamp: String
+    let end_timestamp: String
+    let key_topics: [String]
+    let document_paths: [String]
+    let browser_urls: [String]
+    let confidence: Double
+    let is_active: Bool
+}
+
+/// Response body for GET /v1/activities
+struct ActivitiesResponse: Codable, Sendable {
+    let activities: [InferredActivityItem]
+    let time_range_minutes: Int
+    let total: Int
+}
+
+/// A link between two activities in the activity graph.
+struct ActivityLinkItem: Codable, Sendable {
+    let id: Int64
+    let source_activity_id: Int64
+    let target_activity_id: Int64
+    let link_type: String
+    let weight: Double
+    let shared_entity: String?
+}
+
+/// Response body for GET /v1/graph
+struct ActivityGraphResponse: Codable, Sendable {
+    let activities: [InferredActivityItem]
+    let links: [ActivityLinkItem]
+    let time_range_minutes: Int
+}
+
+/// Response body for GET /v1/entities
+struct EntityQueryResponse: Codable, Sendable {
+    let entity_type: String
+    let entity_value: String
+    let activities: [InferredActivityItem]
 }

@@ -28,6 +28,16 @@ struct SummaryRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
     /// Nullable: existing summaries are backfilled lazily on first search.
     var embedding: Data?
 
+    /// JSON array of document file paths from captures in this chunk.
+    /// Persisted so metadata survives capture pruning.
+    var documentPaths: String?
+
+    /// JSON array of browser URLs from captures in this chunk.
+    var browserURLs: String?
+
+    /// LLM-classified activity type (coding, research, communication, admin, etc.)
+    var activityType: String?
+
     // MARK: - Table mapping
 
     static let databaseTableName = "summaries"
@@ -35,6 +45,7 @@ struct SummaryRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
     enum Columns: String, ColumnExpression {
         case id, startTimestamp, endTimestamp, appNames
         case summary, keyTopics, captureIds, embedding
+        case documentPaths, browserURLs, activityType
     }
 
     // MARK: - Record lifecycle
@@ -74,6 +85,26 @@ extension SummaryRecord {
             return []
         }
         return topics
+    }
+
+    /// Decode document paths JSON to an array of strings.
+    var decodedDocumentPaths: [String] {
+        guard let json = documentPaths,
+              let data = json.data(using: .utf8),
+              let paths = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return paths
+    }
+
+    /// Decode browser URLs JSON to an array of strings.
+    var decodedBrowserURLs: [String] {
+        guard let json = browserURLs,
+              let data = json.data(using: .utf8),
+              let urls = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return urls
     }
 
     /// Start date

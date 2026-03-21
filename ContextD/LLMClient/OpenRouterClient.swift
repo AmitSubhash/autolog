@@ -71,9 +71,12 @@ final class OpenRouterClient: LLMClient, Sendable {
         )
     }
 
-    /// Check whether an API key exists in Keychain.
+    /// Check whether an API key is available (keychain or proxy).
+    /// Returns true in proxy mode (no key needed).
+    /// Skips keychain access when using proxy (avoids macOS keychain prompt).
     static func hasAPIKey() -> Bool {
-        KeychainHelper.exists(key: keychainKey)
+        if isUsingProxy { return true }
+        return KeychainHelper.exists(key: keychainKey)
     }
 
     /// Delete the API key from Keychain.
@@ -111,8 +114,9 @@ final class OpenRouterClient: LLMClient, Sendable {
         temperature: Double,
         responseFormat: String?
     ) async throws -> LLMResponse {
-        // When using a local proxy (claude -p), no API key is needed
-        let apiKey = Self.readAPIKey() ?? (Self.isUsingProxy ? "" : nil)
+        // When using a local proxy (claude -p), no API key is needed.
+        // Skip keychain access entirely for proxy mode to avoid macOS prompt.
+        let apiKey: String? = Self.isUsingProxy ? "" : Self.readAPIKey()
         guard let apiKey else {
             throw LLMError.noAPIKey
         }

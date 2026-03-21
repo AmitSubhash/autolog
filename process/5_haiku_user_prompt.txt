@@ -1,0 +1,201 @@
+Summarize this computer activity segment:
+
+Time: 18:20:03 to 18:21:35
+Duration: 1m 32s
+Focused Application: Brave Browser
+Window Title: Restoring brain-to-text communication in a person with dysarthria from pontine stroke using an intracortical brain-computer interface - Brave
+All Visible Windows:
+Brave Browser: CRUCIX — Intelligence Terminal - Brave
+Claude: Claude
+Emacs: *claude-code[Downloads]* – Doom Emacs
+Finder: contextd
+Safari: CV — (4) Post | Feed | LinkedIn
+Terminal: amit — ⠂ Claude Code — caffeinate ◂ claude — 134×39
+iTerm2: /bin/bash
+Documents Open: /Users/amit, https://www.medrxiv.org/content/10.64898/2026.02.19.26346583v1, https://www.medrxiv.org/content/10.64898/2026.02.19.26346583v1.full.pdf
+URLs Visible: None
+
+Full screen OCR text (everything visible on screen):
+--- KEYFRAME (18:21:35) [Brave Browser - Restoring brain-to-text communication in a person with dysarthria from pontine stroke using an intracortical brain-computer interface - Brave] ---
+Brave
+File
+Edit
+View
+History
+Bookmarks
+Profiles
+Tab
+Window
+Help
+97% 2.
+8
+Fri 6:21
+(1700) Ho
+(in) (6) Feed |
+AdventOf
+(1669) Sir
+• (1701) 26
+¿; Discrete C
+→ mattpoco
+" krish's pe
+• AmitSubh
+IC) krish's ble
+*; Day 1 - Ai
+CRUCIX
+mR
+Resto
++
+medrxiv.org/content/10.64898/2026.02.19.26346583v1.full.pdf
+Update =
+=
+Restoring brain-to-text communication in a person with dysarthria fr...
+23 / 23
+- 100%
+:
+61 Herring EZ, Graczyk EL, Memberg WD, et al. Reconnecting the Hand and Arm to the Brain: Efficacy of
+19
+Neural Interfaces for Sensorimotor Restoration After Tetraplegia. Neurosurgery 2024; 94: 864.
+20
+21
+22
+23
+
+--- KEYFRAME (18:21:25) [Brave Browser - Restoring brain-to-text communication in a person with dysarthria from pontine stroke using an intracortical brain-computer interface | medRxiv - Brave] ---
+Brave
+File
+Edit
+View
+History
+Bookmarks
+Profiles
+Tab
+Window
+Help
+97% (
+8
+Fri 6:21
+in: (6) Feed
+• mattpoco
+IC) krish's pe
+IC) krish's blc
+mR
+Resto
++
+medrxiv.org/content/10.64898/2026.02.19.26346583v1
+*
+Update =
+I confirm that all necessary patient/participant consent has been obtained and the appropriate
+Rheumatology
+institutional forms have been archived, and that any patient/participant/sample identifiers
+Sexual and Reproductive Health
+included were not known to anyone (e.g., hospital staff, patients or participants themselves)
+Sports Medicine
+outside the research group so cannot be used to identify individuals.
+Surgery
+Toxicology
+Yes
+Transplantation
+I understand that all clinical trials and any other prospective interventional studies must be
+Urology
+registered with an ICMJE-approved registry, such as ClinicalTrials.gov. I confirm that any such
+study reported in the manuscript has been registered and the trial registration ID is provided
+(note: if posting a prospective study registered retrospectively, please provide a statement in
+the trial ID field explaining why the study was not registered in advance).
+Yes
+I have followed all appropriate research reporting guidelines, such as any relevant EQUATOR
+Network research reporting checklists) and other pertinent material, if applicable.
+Yes
+Copyright The copyright holder for this preprint is the author/funder, who has granted
+medRxiv a license to display the preprint in perpetuity. All rights reserved.
+No reuse allowed without permission.
+bioRxiv and medRxiv thank the following for their generous financial support:
+California Institute of Technology, Centre National de la Recherche Scientifique, Fred Hutchinson
+The Chan Zuckerberg Initiative, Cold Spring Harbor Laboratory, the Sergey Brin Family Foundation,
+Cancer Center, Imperial College London, Massachusetts Institute of Technology, Stanford University,
+The University of Edinburgh, University of Washington, and Vrije Universiteit Amsterdam.
+~ Back to top
+
+--- KEYFRAME (18:21:15) [Brave Browser - Untitled - Inactive tab - Brave] ---
+Brave
+File
+Edit
+View
+History
+Bookmarks
+Profiles
+Tab
+Window
+Help
++
+97% C.
+8
+Fri 6:21
+amit — • Claude Code — caffeinate ‹ claude — 134×39
+context
+88| =
+Q
+Search
+• Macintosh HD
+• Applications
+• amit
+• apple_build_secrets
+ContextD
+• Network
+Library
+Shared
+* Applications
+docs
+R
+System
+• AutoResearchClaw
+hooks
+Users
+contextd
+launchd
+Desktop
+*
+C
+Ilm-proxy
+Documents
+doom-emacs-journey
+mcp-bridge
+process
+• Downloads
+Resources
+•
+B
+• everything-claude-code
+scripts
+• fsl
+Tests
+* Movies
+LICENSE
+a Music
+Makefile
+• org
+Package.resolved
+Pictures
+Package.swift
+• Projects
+README.md
+Public
+Research
+•
+C
+scratch-keepalive
+scripts
+templates
+Zotero
+• Macintosh HD ›
+| Users ›
+amit
+context
+15 items, 272.19 GB available
+No prompts,
+* Cogitated for 58s
+beautful check the piepieline if that works then we're great, look
+if i can actualy like get sinisghts app wise and stuff please..
+also check ram usage
++ Cogitating...
+amit@Amits-MacBook-Pro ~/contextd 
+[...truncated]

@@ -83,4 +83,13 @@ struct CaptureFrame: Sendable {
 
     /// Percentage of screen tiles that changed (0.0-1.0).
     let changePercentage: Double
+
+    /// File path of the document in the focused window (e.g., Xcode project file).
+    let documentPath: String?
+
+    /// URL from the focused window (e.g., Safari tab URL).
+    let browserURL: String?
+
+    /// AX role of the currently focused UI element (e.g., "AXTextField", "AXWebArea").
+    let focusedElementRole: String?
 }

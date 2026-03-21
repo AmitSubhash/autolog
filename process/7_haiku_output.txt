@@ -1,0 +1,22 @@
+```json
+{
+  "summary": "User reviewed a neuroscience research paper on medRxiv about using intracortical brain-computer interfaces to restore brain-to-text communication in a patient with dysarthria following pontine stroke. The PDF was viewed in Brave browser, appearing to be near the end of the document (page 23/23). A reference on neural interfaces for sensorimotor restoration was visible on screen. Research compliance information regarding patient consent and clinical trial registration was also shown.",
+  "key_topics": [
+    "Brain-computer interface (BCI)",
+    "Dysarthria",
+    "Pontine stroke",
+    "Intracortical neural interface",
+    "Brain-to-text communication",
+    "Sensorimotor restoration",
+    "Neural interfaces",
+    "medRxiv",
+    "Tetraplegia"
+  ],
+  "activity_type": "research",
+  "files_mentioned": [],
+  "urls_visited": [
+    "https://www.medrxiv.org/content/10.64898/2026.02.19.26346583v1",
+    "https://www.medrxiv.org/content/10.64898/2026.02.19.26346583v1.full.pdf"
+  ]
+}
+```

@@ -44,6 +44,15 @@ struct CaptureRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
     /// Percentage of screen tiles that changed (0.0-1.0).
     var changePercentage: Double
 
+    /// File path of the document in the focused window.
+    var documentPath: String?
+
+    /// URL from the focused window (e.g., browser tab).
+    var browserURL: String?
+
+    /// AX role of the currently focused UI element.
+    var focusedElementRole: String?
+
     // MARK: - Table mapping
 
     static let databaseTableName = "captures"
@@ -52,6 +61,7 @@ struct CaptureRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
         case id, timestamp, appName, appBundleID, windowTitle
         case ocrText, fullOcrText, visibleWindows, textHash, isSummarized
         case frameType, keyframeId, changePercentage
+        case documentPath, browserURL, focusedElementRole
     }
 
     // MARK: - Record lifecycle
@@ -85,6 +95,9 @@ extension CaptureRecord {
         self.frameType = frame.frameType.rawValue
         self.keyframeId = frame.keyframeId
         self.changePercentage = frame.changePercentage
+        self.documentPath = frame.documentPath
+        self.browserURL = frame.browserURL
+        self.focusedElementRole = frame.focusedElementRole
 
         // Encode visible windows as JSON
         if let data = try? JSONEncoder().encode(frame.visibleWindows),

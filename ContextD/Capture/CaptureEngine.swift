@@ -35,6 +35,7 @@ final class CaptureEngine: ObservableObject {
     private let ocrProcessor = OCRProcessor()
     private let accessibilityReader = AccessibilityReader()
     private let storageManager: StorageManager
+    private var sessionDetector: AppSessionDetector?
 
     let logger = DualLogger(category: "CaptureEngine")
 
@@ -203,6 +204,11 @@ final class CaptureEngine: ObservableObject {
         }
     }
 
+    /// Inject the session detector for app session tracking.
+    func setSessionDetector(_ detector: AppSessionDetector) {
+        self.sessionDetector = detector
+    }
+
     /// Start the capture loop.
     func start() {
         guard !isRunning else { return }
@@ -217,6 +223,9 @@ final class CaptureEngine: ObservableObject {
 
         captureTask = Task { [weak self] in
             guard let self = self else { return }
+            // Wait for app lifecycle to fully initialize before first capture.
+            // Without this delay, the screencapture CLI may fail when launched via `open`.
+            try? await Task.sleep(for: .seconds(3))
             while !Task.isCancelled && self.isRunning {
                 if !self.isSleeping {
                     let cycleStart = ContinuousClock.now
@@ -277,8 +286,8 @@ final class CaptureEngine: ObservableObject {
             // Step 1: Read accessibility metadata
             let metadata = accessibilityReader.readCurrentState()
 
-            // Step 2: Capture screenshot
-            guard let image = try screenCapture.captureMainDisplay() else {
+            // Step 2: Capture screenshot (async, via system screencapture CLI)
+            guard let image = try await screenCapture.captureMainDisplay() else {
                 logger.warning("Screenshot capture returned nil")
                 return
             }
@@ -401,11 +410,19 @@ final class CaptureEngine: ObservableObject {
             textHash: textHash,
             frameType: .keyframe,
             keyframeId: nil,
-            changePercentage: changePercentage
+            changePercentage: changePercentage,
+            documentPath: metadata.documentPath,
+            browserURL: metadata.browserURL,
+            focusedElementRole: metadata.focusedElementRole
         )
 
         // Store in database
         let record = try storageManager.insertCapture(frame)
+
+        // Notify session detector (awaited to preserve ordering)
+        if let detector = sessionDetector {
+            await detector.processCapture(record)
+        }
 
         // Update keyframe state
         currentKeyframeId = record.id
@@ -428,19 +445,14 @@ final class CaptureEngine: ObservableObject {
         metadata: AccessibilityReader.ScreenMetadata,
         diffResult: DiffResult
     ) async throws {
-        // OCR only changed regions (or full OCR if >8 regions)
+        // Always do full-screen OCR so we capture ALL visible context,
+        // not just what changed. The diff is used for skip detection only.
         let ocrResult = try await Task.detached(priority: .userInitiated) { [ocrProcessor] in
-            try ocrProcessor.recognizeText(
-                inRegions: diffResult.changedRegions,
-                fullImage: image,
-                fullImageSize: CGSize(width: image.width, height: image.height)
-            )
+            try ocrProcessor.recognizeText(in: image)
         }.value
 
         let deltaText = ocrResult.fullText
-        // Store only the delta text, not keyframe+delta concatenated.
-        // The keyframe text is already stored in the keyframe record.
-        let fullOcrText = deltaText.isEmpty ? (currentKeyframeText ?? "") : deltaText
+        let fullOcrText = ocrResult.fullText
 
         // Hash dedup on fullOcrText
         let normalizedText = fullOcrText.normalizedForDedup
@@ -464,11 +476,19 @@ final class CaptureEngine: ObservableObject {
             textHash: textHash,
             frameType: .delta,
             keyframeId: currentKeyframeId,
-            changePercentage: diffResult.tileDiff.changePercentage
+            changePercentage: diffResult.tileDiff.changePercentage,
+            documentPath: metadata.documentPath,
+            browserURL: metadata.browserURL,
+            focusedElementRole: metadata.focusedElementRole
         )
 
         // Store in database
-        try storageManager.insertCapture(frame)
+        let record = try storageManager.insertCapture(frame)
+
+        // Notify session detector (awaited to preserve ordering)
+        if let detector = sessionDetector {
+            await detector.processCapture(record)
+        }
 
         // Update state
         lastTextHash = textHash

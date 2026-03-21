@@ -1,0 +1,28 @@
+{
+  "capture_id": 575,
+  "timestamp": "2026-03-20T16:34:33.577835",
+  "app_name": "Terminal",
+  "app_bundle_id": "com.apple.Terminal",
+  "window_title": null,
+  "document_path": null,
+  "browser_url": null,
+  "focused_element_role": null,
+  "visible_windows": [
+    {
+      "appName": "Terminal",
+      "windowTitle": "amit \u2014 \u2810 Claude Code \u2014 caffeinate \u25c2 claude \u2014 134\u00d739"
+    },
+    {
+      "appName": "Safari",
+      "windowTitle": "CV \u2014 https://www.linkedin.com/me/profile-views?skipRedirect=true"
+    },
+    {
+      "appName": "Finder",
+      "windowTitle": "contextd"
+    },
+    {
+      "appName": "Claude",
+      "windowTitle": "Claude"
+    }
+  ]
+}

@@ -33,14 +33,30 @@ enum PromptTemplates {
         the subject of the work
         - Action words as topics ("Debugging", "Browsing", "Coding", "Reading")
 
+        For activity_type, classify as exactly ONE of:
+        - "coding" (writing, debugging, building, testing code)
+        - "research" (reading docs, browsing Stack Overflow, searching)
+        - "writing" (drafting text, notes, emails, papers)
+        - "communication" (Slack, email, messaging, video calls)
+        - "design" (Figma, visual design, UI work)
+        - "admin" (system settings, file management, installations)
+        - "review" (code review, PR review, reading diffs)
+        - "other" (anything that does not fit the above)
+
+        For files_mentioned, extract file paths or filenames visible on screen.
+        For urls_visited, extract URLs visible in browser address bars or links.
+
         Constraints:
         - Summary: 2-3 sentences maximum, under 100 words
         - Topics: 2-5 maximum. Prefer fewer, more specific topics over many vague ones
+        - files_mentioned: actual file paths/names seen, not guesses. Empty array if none.
+        - urls_visited: actual URLs seen, not guesses. Empty array if none.
         - Exclude passwords, personal messages, financial account numbers, and \
-        other sensitive data from both the summary and topics
+        other sensitive data from all fields
 
         Respond ONLY in this JSON format (no markdown, no explanation):
-        {"summary": "...", "key_topics": ["topic1", "topic2"]}
+        {"summary": "...", "key_topics": ["topic1"], "activity_type": "coding", \
+        "files_mentioned": ["/path/to/file.swift"], "urls_visited": ["https://..."]}
         """
 
     static let summarizationUser = """
@@ -48,10 +64,13 @@ enum PromptTemplates {
 
         Time: {start_time} to {end_time}
         Duration: {duration}
-        Application: {app_name}
-        Window: {window_title}
+        Focused Application: {app_name}
+        Window Title: {window_title}
+        All Visible Windows: {visible_windows}
+        Documents Open: {document_paths}
+        URLs Visible: {browser_urls}
 
-        Screen activity (keyframes show full screen, deltas show only what changed):
+        Full screen OCR text (everything visible on screen):
         {ocr_samples}
         """
 
@@ -161,6 +180,38 @@ enum PromptTemplates {
         Extract structured JSON citations with relevant context for the user's query.
         """
 
+    // MARK: - Activity Inference
+
+    static let activityInferenceSystem = """
+        You group app sessions into logical activities/tasks. Each session represents \
+        a contiguous stretch of using one application.
+
+        Group sessions that represent the same logical task, even across different apps. \
+        For example, "debugging a build error" might involve Terminal, Xcode, and Safari.
+
+        Rules:
+        - Each session must belong to exactly one activity
+        - Activity names should be specific and actionable (e.g., "Debugging contextd \
+        sleep-wake handling", NOT "Coding")
+        - Sessions with no clear grouping should be individual activities
+        - Confidence: 0.9+ for clear groups, 0.5-0.8 for uncertain groupings
+
+        Respond ONLY in JSON (no markdown, no explanation):
+        {"activities": [
+            {"name": "...", "description": "...", "session_ids": [1, 2], \
+        "key_topics": ["topic1"], "confidence": 0.9}
+        ]}
+        """
+
+    static let activityInferenceUser = """
+        Group these app sessions into logical activities:
+
+        {sessions}
+
+        Each session has: id, app, window titles, document paths, URLs, time range, \
+        and overlapping summary text.
+        """
+
     // MARK: - Template Rendering
 
     /// Render a template by replacing {placeholder} tokens with values.
@@ -234,6 +285,8 @@ extension PromptTemplates {
         case enrichmentPass2User = "prompt_enrichment_pass2_user"
         case citationPass2System = "prompt_citation_pass2_system"
         case citationPass2User = "prompt_citation_pass2_user"
+        case activityInferenceSystem = "prompt_activity_inference_system"
+        case activityInferenceUser = "prompt_activity_inference_user"
     }
 
     /// Get a template, preferring the user's custom version from UserDefaults.
@@ -250,6 +303,8 @@ extension PromptTemplates {
         case .enrichmentPass2User: return enrichmentPass2User
         case .citationPass2System: return citationPass2System
         case .citationPass2User: return citationPass2User
+        case .activityInferenceSystem: return activityInferenceSystem
+        case .activityInferenceUser: return activityInferenceUser
         }
     }
 }

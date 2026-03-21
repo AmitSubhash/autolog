@@ -14,8 +14,10 @@ final class ServiceContainer {
     let storageManager: StorageManager?
     let llmClient: OpenRouterClient
     let captureEngine: CaptureEngine?
+    let sessionDetector: AppSessionDetector?
     let enrichmentEngine: EnrichmentEngine?
     let summarizationEngine: SummarizationEngine?
+    let activityInferenceEngine: ActivityInferenceEngine?
     let panelController: EnrichmentPanelController?
     let debugController: DebugWindowController?
 
@@ -48,12 +50,20 @@ final class ServiceContainer {
 
             database = db
             storageManager = storage
-            captureEngine = CaptureEngine(storageManager: storage)
+
+            let engine = CaptureEngine(storageManager: storage)
+            let detector = AppSessionDetector(storageManager: storage)
+            engine.setSessionDetector(detector)
+            captureEngine = engine
+            sessionDetector = detector
 
             let enrichment = EnrichmentEngine(storageManager: storage, llmClient: llmClient)
             enrichmentEngine = enrichment
 
             summarizationEngine = SummarizationEngine(storageManager: storage, llmClient: llmClient)
+            activityInferenceEngine = ActivityInferenceEngine(
+                storageManager: storage, llmClient: llmClient
+            )
             panelController = EnrichmentPanelController(enrichmentEngine: enrichment)
             debugController = DebugWindowController(storageManager: storage)
 
@@ -64,8 +74,10 @@ final class ServiceContainer {
             database = nil
             storageManager = nil
             captureEngine = nil
+            sessionDetector = nil
             enrichmentEngine = nil
             summarizationEngine = nil
+            activityInferenceEngine = nil
             panelController = nil
             debugController = nil
         }
@@ -164,6 +176,13 @@ final class ServiceContainer {
             }
         } else {
             logger.warning("No API key found and mode is \(sumMode.rawValue) -- summarization disabled")
+        }
+
+        // Start activity inference engine (requires LLM access, same as summarization)
+        if canSummarize {
+            if let activityEngine = activityInferenceEngine {
+                Task { await activityEngine.start() }
+            }
         }
 
         // Start the API server if enabled

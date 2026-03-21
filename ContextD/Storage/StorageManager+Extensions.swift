@@ -221,8 +221,9 @@ extension StorageManager {
     /// Delete captures that have already been summarized and are older than
     /// the given number of hours. This keeps the captures table lean while
     /// preserving unsummarized captures that still need processing.
+    /// Default 72h (3 days) to keep raw captures available for enrichment Pass 2.
     @discardableResult
-    func pruneProcessedCaptures(olderThan hours: Int = 24) throws -> Int {
+    func pruneProcessedCaptures(olderThan hours: Int = 72) throws -> Int {
         let cutoff = Date().timeIntervalSince1970 - Double(hours * 3600)
         return try database.dbPool.write { db in
             try db.execute(

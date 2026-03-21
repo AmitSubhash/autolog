@@ -1,0 +1,59 @@
+Terminal
+Shell
+Edit
+View
+Window
+Help
+*
++
+91%
+8
+Fri 4:34
+• amit — • Claude Code — caffeinate ‹ claude - 134×39
+~ - • Claude Code - caffeinate • claude
+~ - * Claude Code - bun - claude
+~ - codex
+~ - -ZSN
+~- codex
+1
+md files remaining
+... +9 lines (ctrl+o to expand)
+• Bash(rm -f~/Documents/contextd-vault/2026-03-20.md
+echo "Clean vault. O notes.")
+L Clean vault. 0 notes.
+• Now create the process audit pipeline. This will capture one full cycle and save every intermediate artifact:
+• Bash(mkdir -p /Users/amit/contextd/process
+1s /Users/amit/contextd/process/)
+L (No output)
+• Write(process/audit_pipeline.py)
+L Wrote 275 lines to process/audit_pipeline.py
+2
+"""Audit the contextd pipeline by capturing one full cycle's artifacts.
+3 Saves intermediate outputs from each stage to process/ folder:
+4
+1_screenshot.png
+- Raw screen capture
+2_diff_info.txt
+- Pixel diff result (vs previous frame)
+6
+3_ocr_raw.txt
+- Raw OCR text from Vision
+7
+8
+4_ocr_regions. json
+- OCR regions with bounding boxes + confidence
+9
+5_metadata.json
+- Accessibility metadata (app, window, doc path, URL, role)
+10
+6_capture_record.json
+- What gets stored in the DB
+7_chunk_input.txt
+- Formatted text sent to Haiku for summarization
+... +265
+lines (ctrl+o to expand)
+• Bash(python3 process/audit_pipeline.py)
+L Running...
++ Recombobulating... (1m 34s • \ 3.0k tokens)
+• accept edits on • 1 bash
+amit Amits-MacBook-Pro /contextd (community-improvements) Sonnet .. 8% until auto-compact • /model sonnet[1m Remote Control re.

@@ -61,32 +61,19 @@ final class PermissionManager: ObservableObject {
 
     // MARK: - Screen Recording
 
-    /// Check if Screen Recording permission is granted (does not prompt).
+    /// Check if Screen Recording permission is granted.
+    /// Since we use the system `screencapture` CLI (pre-authorized), we always
+    /// return true and never call CGPreflightScreenCaptureAccess or
+    /// CGRequestScreenCaptureAccess, which trigger the macOS Sequoia permission
+    /// dialog on every app launch.
     func checkScreenRecording() -> Bool {
-        CGPreflightScreenCaptureAccess()
+        true
     }
 
-    /// Request Screen Recording permission. Shows the system prompt on first call only.
-    /// After the system dialog, polls CGPreflightScreenCaptureAccess() every 2 seconds
-    /// for up to 60 seconds so the UI updates once the user grants permission.
+    /// No-op: screencapture CLI does not require per-app Screen Recording permission.
     func requestScreenRecording() {
-        // CGRequestScreenCaptureAccess() opens the system dialog but always returns false
-        // on first call. We must poll CGPreflightScreenCaptureAccess() to detect the grant.
-        CGRequestScreenCaptureAccess()
-        screenRecordingPollTask?.cancel()
-        screenRecordingPollTask = Task { [weak self] in
-            for _ in 0..<30 { // 30 x 2s = 60s max
-                try? await Task.sleep(for: .seconds(2))
-                guard !Task.isCancelled else { return }
-                let granted = CGPreflightScreenCaptureAccess()
-                if granted {
-                    self?.screenRecordingGranted = true
-                    self?.logger.info("Screen Recording permission granted after polling.")
-                    return
-                }
-            }
-            self?.logger.warning("Screen Recording permission not granted within polling window.")
-        }
+        screenRecordingGranted = true
+        logger.info("Screen Recording: using system screencapture CLI (always authorized)")
     }
 
     // MARK: - Accessibility

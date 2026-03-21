@@ -1,33 +1,59 @@
 import Foundation
 import CoreGraphics
+import AppKit
 
-/// Captures single-frame screenshots of the main display using CGDisplayCreateImage.
-/// Uses CoreGraphics directly, not ScreenCaptureKit, so there is no recording
-/// indicator and no app-visible screenshot notifications.
+/// Captures single-frame screenshots using the system `screencapture` CLI tool.
+/// This avoids macOS Sequoia's ScreenCaptureKit permission re-prompts entirely
+/// since `screencapture` is a pre-authorized system binary.
 ///
-/// Screen sharing coexistence: CGDisplayCreateImage is a read-only,
-/// non-exclusive API. It does NOT interfere with Zoom, Teams, FaceTime,
-/// or any other app's ScreenCaptureKit-based screen sharing sessions.
-/// Both can run simultaneously without conflict.
-final class ScreenCapture: Sendable {
+/// The capture excludes contextd's own windows by temporarily hiding them
+/// during the screenshot, then restoring them immediately after.
+final class ScreenCapture: @unchecked Sendable {
     private let logger = DualLogger(category: "ScreenCapture")
 
-    /// Maximum capture width in pixels. Images wider than this are downscaled
-    /// proportionally to keep OCR fast and storage lean.
-    private let maxWidth: CGFloat = 1920
+    /// Maximum capture width in pixels. 2560 balances OCR readability and perf.
+    private let maxWidth: CGFloat = 2560
+
+    /// Temporary file path for screenshot output.
+    private let tempPath = NSTemporaryDirectory() + "contextd-capture.png"
 
     /// Capture a screenshot of the main display.
-    /// Returns a CGImage, or nil if capture fails (e.g., no permission).
-    func captureMainDisplay() throws -> CGImage? {
-        guard let raw = CGDisplayCreateImage(CGMainDisplayID()) else {
-            logger.error("CGDisplayCreateImage returned nil (no display or no permission)")
+    /// Async: runs screencapture process without blocking the MainActor.
+    func captureMainDisplay() async throws -> CGImage? {
+        // Run screencapture in a detached task (off MainActor)
+        let path = tempPath
+        let image: CGImage? = try await Task.detached(priority: .userInitiated) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            process.arguments = ["-x", "-t", "png", path]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+
+            try process.run()
+            process.waitUntilExit()
+
+            guard process.terminationStatus == 0 else { return nil as CGImage? }
+
+            guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+                  let nsImage = NSImage(data: data),
+                  let cgImage = nsImage.cgImage(
+                    forProposedRect: nil, context: nil, hints: nil
+                  ) else {
+                return nil as CGImage?
+            }
+
+            try? FileManager.default.removeItem(atPath: path)
+            return cgImage
+        }.value
+
+        guard let raw = image else {
+            logger.error("screencapture failed or returned nil")
             return nil
         }
 
-        // Downscale if wider than maxWidth (preserves aspect ratio)
-        let image = downscaleIfNeeded(raw)
-        logger.debug("Captured screenshot: \(image.width)x\(image.height)")
-        return image
+        let scaled = downscaleIfNeeded(raw)
+        logger.debug("Captured screenshot: \(scaled.width)x\(scaled.height)")
+        return scaled
     }
 
     /// Proportionally downscale an image if it exceeds `maxWidth`.
@@ -46,7 +72,8 @@ final class ScreenCapture: Sendable {
             bitsPerComponent: 8,
             bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                | CGBitmapInfo.byteOrder32Little.rawValue
         ) else {
             logger.warning("Failed to create downscale context, returning original image")
             return image

@@ -34,21 +34,19 @@ actor SummarizationEngine {
     var mode: SummarizationMode = .cloud
 
     /// How often to check for unsummarized captures (seconds).
-    /// Set higher than base capture interval since claude -p calls take ~70s each.
-    var pollInterval: TimeInterval = 120
+    var pollInterval: TimeInterval = 60
 
     /// Minimum age of captures before summarizing (seconds).
-    /// Wait for a full chunk window to fill before processing.
-    var minimumAge: TimeInterval = 900 // 15 minutes
+    /// 5 min balances freshness with having enough context per chunk.
+    var minimumAge: TimeInterval = 300 // 5 minutes
 
     /// Duration of each summarization time window (seconds).
-    /// 15 minutes keeps LLM call count manageable with claude -p (~70s per call).
-    var chunkDuration: TimeInterval = 900 // 15 minutes
+    /// 5 min chunks for faster feedback. Cost ~$0.002/call, ~12 calls/hour.
+    var chunkDuration: TimeInterval = 300 // 5 minutes
 
     /// Minimum sub-chunk duration when splitting at app boundaries (seconds).
-    /// Sub-chunks shorter than this are merged into the previous chunk to avoid
-    /// micro-chunks from rapid app switching. Set to 0 to disable merging.
-    var minimumChunkDuration: TimeInterval = 30
+    /// 60s prevents micro-summaries from rapid app switching.
+    var minimumChunkDuration: TimeInterval = 60
 
     /// The model to use for summarization (cheap/fast).
     var model: String = "anthropic/claude-haiku-4-5"
@@ -66,12 +64,13 @@ actor SummarizationEngine {
     var maxKeyframeTextLength: Int = 2000
 
     /// Max delta text length in formatted output.
-    var maxDeltaTextLength: Int = 300
+    /// Increased from 300 to 500 (avg delta is ~519 chars, was truncating most deltas).
+    var maxDeltaTextLength: Int = 500
 
     /// Maximum total characters of formatted OCR text to send per chunk.
-    /// Caps the input token cost when a chunk contains very large screen grabs.
-    /// At ~4 chars per token this is roughly 500 input tokens of OCR content.
-    var maxInputCharsPerChunk: Int = 2000
+    /// At ~4 chars per token this is roughly 1000 input tokens of OCR content.
+    /// Increased from 2000 to 4000 to reduce information loss during summarization.
+    var maxInputCharsPerChunk: Int = 4000
 
     /// Maximum chunks per poll cycle. With ~70s per claude -p call and 60s poll interval,
     /// only 1 chunk can realistically complete per cycle.
@@ -210,6 +209,24 @@ actor SummarizationEngine {
             ? "\(Int(duration))s"
             : "\(Int(duration / 60))m \(Int(duration.truncatingRemainder(dividingBy: 60)))s"
 
+        // Extract unique document paths, URLs, and visible windows from captures
+        let docPaths = Set(chunk.captures.compactMap(\.documentPath)).sorted()
+        let urls = Set(chunk.captures.compactMap(\.browserURL)).sorted()
+
+        // Collect all unique visible windows across captures in this chunk
+        let allVisibleWindows = chunk.captures
+            .flatMap(\.decodedVisibleWindows)
+            .reduce(into: [String: String]()) { dict, w in
+                // Dedupe by app name, keep the most recent window title
+                if let title = w.windowTitle, !title.isEmpty {
+                    dict[w.appName] = title
+                } else if dict[w.appName] == nil {
+                    dict[w.appName] = "(no title)"
+                }
+            }
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key): \($0.value)" }
+
         let userPrompt = PromptTemplates.render(
             PromptTemplates.template(for: .summarizationUser),
             values: [
@@ -218,6 +235,9 @@ actor SummarizationEngine {
                 "duration": durationStr,
                 "app_name": chunk.primaryApp,
                 "window_title": chunk.primaryWindowTitle ?? "Unknown",
+                "visible_windows": allVisibleWindows.isEmpty ? "None" : allVisibleWindows.joined(separator: "\n"),
+                "document_paths": docPaths.isEmpty ? "None" : docPaths.joined(separator: ", "),
+                "browser_urls": urls.isEmpty ? "None" : urls.joined(separator: ", "),
                 "ocr_samples": ocrSamples,
             ]
         )
@@ -249,9 +269,18 @@ actor SummarizationEngine {
             logger.debug("Summarizer \(cost)")
         }
 
-        let (summary, keyTopics) = parseSummarizationResponse(llmResponse.text)
+        let parsed = parseSummarizationResponse(llmResponse.text)
 
-        let record = try buildSummaryRecord(chunk: chunk, summary: summary, keyTopics: keyTopics)
+        // Merge LLM-extracted files/URLs with metadata from captures (belt and suspenders)
+        let captureDocPaths = Set(chunk.captures.compactMap(\.documentPath))
+        let captureURLs = Set(chunk.captures.compactMap(\.browserURL))
+        let allDocPaths = Array(captureDocPaths.union(parsed.filesMentioned))
+        let allURLs = Array(captureURLs.union(parsed.urlsVisited))
+
+        let record = try buildSummaryRecord(
+            chunk: chunk, summary: parsed.summary, keyTopics: parsed.keyTopics,
+            documentPaths: allDocPaths, browserURLs: allURLs, activityType: parsed.activityType
+        )
         let inserted = try storageManager.insertSummary(record)
         try storageManager.markCapturesAsSummarized(ids: chunk.captureIds)
 
@@ -261,32 +290,23 @@ actor SummarizationEngine {
 
     // MARK: - Shared Helpers
 
-    /// Build plain OCR text from a chunk for local summarization.
-    private func buildOCRText(for chunk: Chunker.Chunk) -> String {
-        var ocrSamples = CaptureFormatter.formatHierarchical(
-            captures: chunk.captures,
-            maxKeyframes: maxSamplesPerChunk,
-            maxDeltasPerKeyframe: maxDeltasPerKeyframe,
-            maxKeyframeTextLength: maxKeyframeTextLength,
-            maxDeltaTextLength: maxDeltaTextLength
-        )
-
-        if ocrSamples.count > maxInputCharsPerChunk {
-            ocrSamples = String(ocrSamples.prefix(maxInputCharsPerChunk))
-        }
-
-        return ocrSamples
-    }
-
-    /// Build a SummaryRecord from a chunk, summary text, and key topics.
+    /// Build a SummaryRecord from a chunk and parsed LLM output.
     private func buildSummaryRecord(
         chunk: Chunker.Chunk,
         summary: String,
-        keyTopics: [String]
+        keyTopics: [String],
+        documentPaths: [String],
+        browserURLs: [String],
+        activityType: String?
     ) throws -> SummaryRecord {
-        let appNamesJSON = try String(data: JSONEncoder().encode(chunk.appNames), encoding: .utf8) ?? "[]"
-        let captureIdsJSON = try String(data: JSONEncoder().encode(chunk.captureIds), encoding: .utf8) ?? "[]"
-        let keyTopicsJSON = try String(data: JSONEncoder().encode(keyTopics), encoding: .utf8) ?? "[]"
+        let encoder = JSONEncoder()
+        let appNamesJSON = try String(data: encoder.encode(chunk.appNames), encoding: .utf8) ?? "[]"
+        let captureIdsJSON = try String(data: encoder.encode(chunk.captureIds), encoding: .utf8) ?? "[]"
+        let keyTopicsJSON = try String(data: encoder.encode(keyTopics), encoding: .utf8) ?? "[]"
+        let docPathsJSON = documentPaths.isEmpty ? nil :
+            try String(data: encoder.encode(documentPaths), encoding: .utf8)
+        let urlsJSON = browserURLs.isEmpty ? nil :
+            try String(data: encoder.encode(browserURLs), encoding: .utf8)
 
         return SummaryRecord(
             id: nil,
@@ -295,23 +315,41 @@ actor SummarizationEngine {
             appNames: appNamesJSON,
             summary: summary,
             keyTopics: keyTopicsJSON,
-            captureIds: captureIdsJSON
+            captureIds: captureIdsJSON,
+            documentPaths: docPathsJSON,
+            browserURLs: urlsJSON,
+            activityType: activityType
         )
     }
 
-    /// Parse the LLM's JSON response into summary text and key topics.
-    private func parseSummarizationResponse(_ response: String) -> (summary: String, keyTopics: [String]) {
+    /// Parsed fields from the LLM summarization response.
+    struct ParsedSummary {
+        let summary: String
+        let keyTopics: [String]
+        let filesMentioned: [String]
+        let urlsVisited: [String]
+        let activityType: String?
+    }
+
+    /// Parse the LLM's JSON response into structured summary fields.
+    private func parseSummarizationResponse(_ response: String) -> ParsedSummary {
         let cleaned = stripCodeFences(response)
 
         if let data = cleaned.data(using: .utf8),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            let summary = json["summary"] as? String ?? response
-            let topics = json["key_topics"] as? [String] ?? []
-            return (summary, topics)
+            return ParsedSummary(
+                summary: json["summary"] as? String ?? response,
+                keyTopics: json["key_topics"] as? [String] ?? [],
+                filesMentioned: json["files_mentioned"] as? [String] ?? [],
+                urlsVisited: json["urls_visited"] as? [String] ?? [],
+                activityType: json["activity_type"] as? String
+            )
         }
 
-        logger.warning("Failed to parse summarization response as JSON. Raw response:\n(response)")
-        return (response, [])
+        logger.warning("Failed to parse summarization response as JSON. Raw response:\n\(response)")
+        // Truncate raw response to avoid storing garbage as summary text
+        let truncated = String(response.prefix(200))
+        return ParsedSummary(summary: truncated, keyTopics: [], filesMentioned: [], urlsVisited: [], activityType: nil)
     }
 
     /// Strip markdown code fences (```json ... ``` or ``` ... ```) from LLM output.
