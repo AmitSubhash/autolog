@@ -30,6 +30,7 @@ final class CaptureEngine: ObservableObject {
     @Published var lastError: String?
     @Published var state: CaptureState = .paused
     @Published var isPrivacyPaused: Bool = false
+    @Published var isWinking: Bool = false
 
     private let screenCapture = ScreenCapture()
     private let ocrProcessor = OCRProcessor()
@@ -257,6 +258,15 @@ final class CaptureEngine: ObservableObject {
         logger.info("Capture engine stopped")
     }
 
+    /// Brief wink animation: close eye for 200ms then reopen.
+    private func wink() {
+        isWinking = true
+        Task {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            isWinking = false
+        }
+    }
+
     /// Perform a single capture cycle.
     ///
     /// Note: No screen-sharing check is needed here. CGDisplayCreateImage is
@@ -436,6 +446,7 @@ final class CaptureEngine: ObservableObject {
         captureCount += 1
         lastCaptureTime = frame.timestamp
         lastError = nil
+        wink()
 
         logger.debug("Keyframe: app=\(metadata.appName) window=\(metadata.windowTitle ?? "nil") chars=\(ocrResult.fullText.count) change=\(String(format: "%.0f", changePercentage * 100))%")
     }
@@ -497,6 +508,7 @@ final class CaptureEngine: ObservableObject {
         captureCount += 1
         lastCaptureTime = frame.timestamp
         lastError = nil
+        wink()
 
         logger.debug("Delta: app=\(metadata.appName) change=\(String(format: "%.0f", diffResult.tileDiff.changePercentage * 100))% regions=\(diffResult.changedRegions.count) deltaChars=\(deltaText.count)")
     }

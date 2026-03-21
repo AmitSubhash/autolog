@@ -63,6 +63,9 @@ private struct MenuBarIconView: View {
         guard captureEngine.isRunning else {
             return "eye.slash"
         }
+        if captureEngine.isWinking {
+            return "eye"
+        }
         switch captureEngine.state {
         case .recording:
             return "eye.fill"
