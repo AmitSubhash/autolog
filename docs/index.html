@@ -3,456 +3,592 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AutoLog</title>
+<title>AutoLog - Your screen, understood.</title>
+<meta name="description" content="Ambient screen capture with activity knowledge graph. macOS menu bar app that remembers what you were working on.">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg-primary: #09090b;
+    --bg-card: #18181b;
+    --bg-elevated: #1e1e22;
+    --border: rgba(255,255,255,0.08);
+    --border-hover: rgba(255,255,255,0.15);
+    --text-primary: #fafafa;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --accent-blue: #60a5fa;
+    --accent-emerald: #4ade80;
+    --accent-amber: #fbbf24;
+    --accent-rose: #f87171;
+    --accent-violet: #a78bfa;
+    --radius: 12px;
+    --max-width: 1100px;
+  }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    background: #0d1229;
-    color: #e0e6f0;
+    background: var(--bg-primary);
+    color: var(--text-primary);
     font-family: 'Inter', -apple-system, sans-serif;
     overflow-x: hidden;
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
   }
 
-  /* Animated background grid */
-  .bg-grid {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background-image:
-      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
-    background-size: 60px 60px;
-    animation: gridPulse 8s ease-in-out infinite;
-    z-index: 0;
+  /* Nav */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(9,9,11,0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    height: 56px;
   }
-  @keyframes gridPulse {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 1; }
+  .nav-inner {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 0 24px;
+    height: 100%;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .nav-brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 600; font-size: 0.95rem;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+  .nav-brand svg { width: 28px; height: 28px; }
+  .nav-links { display: flex; gap: 4px; }
+  .nav-links a {
+    padding: 6px 14px;
+    border-radius: 8px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.85rem; font-weight: 500;
+    transition: all 0.15s;
+  }
+  .nav-links a:hover {
+    background: rgba(255,255,255,0.06);
+    color: var(--text-primary);
   }
 
+  /* Layout */
   .container {
-    position: relative; z-index: 1;
-    max-width: 1100px; margin: 0 auto; padding: 60px 40px;
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 0 24px;
   }
 
-  /* Hero section */
+  section { padding: 64px 0; }
+
+  /* Hero */
   .hero {
     text-align: center;
-    padding: 80px 0 60px;
-    animation: fadeInUp 1s ease-out;
+    padding: 100px 0 80px;
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 0.78rem; font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 28px;
+  }
+  .hero-badge .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent-emerald);
   }
 
-  .logo-container {
+  .logo-mark {
     display: inline-block;
     position: relative;
-    margin-bottom: 30px;
+    margin-bottom: 32px;
   }
-
-  .logo-eye {
-    width: 120px; height: 120px;
-    position: relative;
-  }
-
-  .logo-eye svg { width: 100%; height: 100%; }
-
+  .logo-mark svg { width: 96px; height: 96px; }
   .logo-ring {
-    position: absolute; top: -15px; left: -15px;
-    width: 150px; height: 150px;
-    border: 2px solid rgba(0,229,255,0.15);
+    position: absolute;
+    top: -12px; left: -12px;
+    width: 120px; height: 120px;
+    border: 1.5px solid rgba(96,165,250,0.12);
     border-radius: 50%;
-    animation: ringPulse 3s ease-in-out infinite;
+    animation: ringPulse 4s ease-in-out infinite;
   }
-  .logo-ring:nth-child(2) { animation-delay: 1s; }
-  .logo-ring:nth-child(3) { animation-delay: 2s; }
-
+  .logo-ring:nth-child(2) { animation-delay: 1.3s; }
   @keyframes ringPulse {
-    0% { transform: scale(1); opacity: 0.5; }
-    50% { transform: scale(1.3); opacity: 0; }
-    100% { transform: scale(1); opacity: 0; }
+    0%, 100% { transform: scale(1); opacity: 0.4; }
+    50% { transform: scale(1.2); opacity: 0; }
   }
 
   h1 {
-    font-size: 4rem; font-weight: 700;
-    background: linear-gradient(135deg, #00e5ff 0%, #fff 50%, #ffb300 100%);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    font-size: clamp(2.4rem, 5vw, 3.5rem);
+    font-weight: 700;
+    letter-spacing: -1.5px;
+    line-height: 1.1;
     margin-bottom: 16px;
-    letter-spacing: -1px;
+  }
+  .hero-tagline {
+    font-size: 1.25rem; font-weight: 300;
+    color: var(--text-secondary);
+    margin-bottom: 36px;
+    max-width: 520px;
+    margin-left: auto; margin-right: auto;
+  }
+  .hero-install {
+    display: inline-flex; align-items: center; gap: 12px;
+    padding: 12px 24px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.88rem;
+    color: var(--accent-amber);
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: all;
+  }
+  .hero-install:hover {
+    border-color: var(--border-hover);
+    background: var(--bg-elevated);
+  }
+  .hero-install .copy-hint {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
-  .tagline {
-    font-size: 1.4rem; font-weight: 300;
-    color: rgba(224,230,240,0.7);
-    margin-bottom: 40px;
+  /* Pipeline */
+  .pipeline-section { padding: 48px 0; }
+  .section-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
   }
-
-  /* Pipeline animation */
-  .pipeline {
+  .pipeline-row {
     display: flex; align-items: center; justify-content: center;
-    gap: 0; flex-wrap: wrap;
-    margin: 60px 0;
-    animation: fadeInUp 1.2s ease-out 0.3s both;
+    gap: 8px;
+    flex-wrap: wrap;
   }
-
   .pipeline-step {
     display: flex; flex-direction: column; align-items: center;
-    padding: 20px 16px;
-    position: relative;
-    opacity: 0;
-    animation: stepAppear 0.5s ease-out forwards;
+    gap: 8px;
+    padding: 16px 18px;
   }
-  .pipeline-step:nth-child(1) { animation-delay: 0.8s; }
-  .pipeline-step:nth-child(3) { animation-delay: 1.2s; }
-  .pipeline-step:nth-child(5) { animation-delay: 1.6s; }
-  .pipeline-step:nth-child(7) { animation-delay: 2.0s; }
-  .pipeline-step:nth-child(9) { animation-delay: 2.4s; }
-
-  @keyframes stepAppear {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
   .step-icon {
-    width: 56px; height: 56px;
-    background: rgba(0,229,255,0.08);
-    border: 1.5px solid rgba(0,229,255,0.25);
-    border-radius: 14px;
+    width: 48px; height: 48px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
     display: flex; align-items: center; justify-content: center;
-    font-size: 24px;
-    margin-bottom: 10px;
-    transition: all 0.3s;
+    font-size: 20px;
+    transition: all 0.2s;
   }
   .step-icon:hover {
-    background: rgba(0,229,255,0.15);
-    border-color: rgba(0,229,255,0.5);
-    transform: scale(1.1);
+    border-color: var(--accent-blue);
+    transform: translateY(-2px);
   }
-
   .step-label {
-    font-size: 0.75rem; font-weight: 500;
-    color: rgba(0,229,255,0.8);
+    font-size: 0.7rem; font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 1px;
+    color: var(--text-muted);
   }
-
   .pipeline-arrow {
-    color: rgba(0,229,255,0.3);
-    font-size: 1.2rem;
-    padding: 0 4px;
-    opacity: 0;
-    animation: arrowAppear 0.3s ease-out forwards;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    opacity: 0.4;
   }
-  .pipeline-arrow:nth-child(2) { animation-delay: 1.0s; }
-  .pipeline-arrow:nth-child(4) { animation-delay: 1.4s; }
-  .pipeline-arrow:nth-child(6) { animation-delay: 1.8s; }
-  .pipeline-arrow:nth-child(8) { animation-delay: 2.2s; }
 
-  @keyframes arrowAppear {
-    from { opacity: 0; transform: translateX(-10px); }
-    to { opacity: 1; transform: translateX(0); }
+  /* Stats grid */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-top: 48px;
   }
+  @media (max-width: 640px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .stat-label {
+    font-size: 0.7rem; font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .stat-value {
+    font-size: 1.8rem; font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-sub {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .accent-blue { color: var(--accent-blue); }
+  .accent-emerald { color: var(--accent-emerald); }
+  .accent-amber { color: var(--accent-amber); }
+  .accent-rose { color: var(--accent-rose); }
 
   /* Feature cards */
-  .features {
+  .features-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 24px;
-    margin: 40px 0;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
   }
-
   .feature-card {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 16px;
-    padding: 28px;
-    opacity: 0;
-    animation: cardAppear 0.6s ease-out forwards;
-    transition: all 0.3s;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    transition: all 0.2s;
   }
   .feature-card:hover {
-    background: rgba(0,229,255,0.04);
-    border-color: rgba(0,229,255,0.15);
-    transform: translateY(-4px);
+    border-color: var(--border-hover);
+    transform: translateY(-2px);
   }
-  .feature-card:nth-child(1) { animation-delay: 2.6s; }
-  .feature-card:nth-child(2) { animation-delay: 2.8s; }
-  .feature-card:nth-child(3) { animation-delay: 3.0s; }
-  .feature-card:nth-child(4) { animation-delay: 3.2s; }
-
-  @keyframes cardAppear {
-    from { opacity: 0; transform: translateY(30px); }
-    to { opacity: 1; transform: translateY(0); }
+  .feature-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
   }
-
   .feature-card h3 {
-    font-size: 1.1rem; font-weight: 600;
-    margin-bottom: 10px;
-    color: #fff;
+    font-size: 0.95rem; font-weight: 600;
+    margin-bottom: 8px;
+    display: flex; align-items: center;
   }
-  .feature-card h3 span { margin-right: 8px; }
-
   .feature-card p {
-    font-size: 0.9rem; line-height: 1.6;
-    color: rgba(224,230,240,0.6);
+    font-size: 0.85rem;
+    line-height: 1.65;
+    color: var(--text-secondary);
   }
 
-  /* Live terminal simulation */
+  /* Terminal */
   .terminal {
-    background: #151a2e;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 12px;
-    margin: 50px 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
     overflow: hidden;
-    opacity: 0;
-    animation: cardAppear 0.6s ease-out 3.4s forwards;
+    margin-top: 40px;
   }
-
   .terminal-bar {
-    background: rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.03);
     padding: 10px 16px;
     display: flex; gap: 8px; align-items: center;
+    border-bottom: 1px solid var(--border);
   }
-  .terminal-dot {
-    width: 12px; height: 12px; border-radius: 50%;
-  }
+  .terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
   .terminal-dot.red { background: #ff5f57; }
   .terminal-dot.yellow { background: #febc2e; }
   .terminal-dot.green { background: #28c840; }
   .terminal-title {
-    margin-left: 8px; font-size: 0.75rem;
-    color: rgba(255,255,255,0.4);
+    margin-left: 8px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
     font-family: 'JetBrains Mono', monospace;
   }
-
   .terminal-body {
     padding: 20px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.82rem;
-    line-height: 1.7;
+    font-size: 0.8rem;
+    line-height: 1.75;
     min-height: 200px;
+    max-height: 380px;
+    overflow-y: auto;
   }
-
   .term-line {
     opacity: 0;
-    animation: typeLine 0.3s ease-out forwards;
+    animation: lineIn 0.25s ease-out forwards;
   }
-
-  @keyframes typeLine {
-    from { opacity: 0; transform: translateX(-5px); }
-    to { opacity: 1; transform: translateX(0); }
+  @keyframes lineIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
-
-  .term-prompt { color: #28c840; }
-  .term-cmd { color: #00e5ff; }
-  .term-output { color: rgba(224,230,240,0.5); }
-  .term-highlight { color: #ffb300; }
-  .term-file { color: #c792ea; }
-  .term-num { color: #82aaff; }
-
-  /* Stats bar */
-  .stats {
-    display: flex; justify-content: center; gap: 50px;
-    margin: 50px 0;
-    opacity: 0;
-    animation: fadeInUp 0.6s ease-out 4.0s forwards;
-  }
-
-  .stat {
-    text-align: center;
-  }
-
-  .stat-value {
-    font-size: 2.2rem; font-weight: 700;
-    color: #00e5ff;
-    font-family: 'JetBrains Mono', monospace;
-  }
-
-  .stat-label {
-    font-size: 0.8rem;
-    color: rgba(224,230,240,0.4);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-top: 4px;
-  }
+  .term-prompt { color: var(--accent-emerald); }
+  .term-cmd { color: var(--accent-blue); }
+  .term-output { color: var(--text-muted); }
+  .term-highlight { color: var(--accent-amber); }
+  .term-file { color: var(--accent-violet); }
+  .term-num { color: var(--accent-blue); }
 
   /* Footer */
-  .footer {
+  footer {
     text-align: center;
-    padding: 40px 0;
-    opacity: 0;
-    animation: fadeInUp 0.6s ease-out 4.4s forwards;
+    padding: 60px 0;
+    border-top: 1px solid var(--border);
   }
-
-  .footer a {
-    display: inline-block;
-    padding: 14px 36px;
-    background: linear-gradient(135deg, rgba(0,229,255,0.15), rgba(255,179,0,0.1));
-    border: 1px solid rgba(0,229,255,0.3);
+  footer .cta {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 28px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
     border-radius: 10px;
-    color: #00e5ff;
+    color: var(--text-primary);
     text-decoration: none;
-    font-weight: 600;
-    font-size: 1rem;
-    transition: all 0.3s;
+    font-weight: 600; font-size: 0.9rem;
+    transition: all 0.15s;
   }
-  .footer a:hover {
-    background: linear-gradient(135deg, rgba(0,229,255,0.25), rgba(255,179,0,0.15));
-    border-color: rgba(0,229,255,0.5);
-    transform: translateY(-2px);
+  footer .cta:hover {
+    border-color: var(--border-hover);
+    transform: translateY(-1px);
+  }
+  footer .cta svg {
+    width: 18px; height: 18px;
+    fill: currentColor;
+  }
+  footer .sub {
+    margin-top: 16px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  footer .author {
+    margin-top: 8px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
   }
 
-  .footer p {
-    margin-top: 20px;
-    font-size: 0.85rem;
-    color: rgba(224,230,240,0.3);
+  /* Scroll animations */
+  .fade-in {
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+  }
+  .fade-in.visible {
+    opacity: 1;
+    transform: translateY(0);
   }
 
-  @keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(30px); }
-    to { opacity: 1; transform: translateY(0); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+    .fade-in { opacity: 1; transform: none; }
   }
 </style>
 </head>
 <body>
-<div class="bg-grid"></div>
+
+<nav>
+  <div class="nav-inner">
+    <a class="nav-brand" href="#">
+      <svg viewBox="0 0 120 120">
+        <path d="M 20 60 Q 60 30 100 60" fill="none" stroke="#60a5fa" stroke-width="2" opacity="0.6"/>
+        <path d="M 20 60 Q 60 90 100 60" fill="none" stroke="#60a5fa" stroke-width="2" opacity="0.6"/>
+        <circle cx="60" cy="60" r="8" fill="#fbbf24"/>
+        <circle cx="60" cy="60" r="4" fill="#fde68a"/>
+      </svg>
+      AutoLog
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#demo">Demo</a>
+      <a href="https://github.com/AmitSubhash/autolog">GitHub</a>
+    </div>
+  </div>
+</nav>
+
 <div class="container">
 
+  <!-- Hero -->
   <div class="hero">
-    <div class="logo-container">
-      <div class="logo-ring"></div>
-      <div class="logo-ring"></div>
-      <div class="logo-ring"></div>
-      <div class="logo-eye">
-        <svg viewBox="0 0 120 120">
-          <defs>
-            <radialGradient id="glow" cx="50%" cy="50%" r="40%">
-              <stop offset="0%" stop-color="#ffb300" stop-opacity="0.4"/>
-              <stop offset="100%" stop-color="#ffb300" stop-opacity="0"/>
-            </radialGradient>
-          </defs>
-          <!-- Graph edges -->
-          <g stroke="#00bcd4" stroke-width="0.8" fill="none" opacity="0.3">
-            <line x1="60" y1="20" x2="95" y2="40"/>
-            <line x1="95" y1="40" x2="95" y2="80"/>
-            <line x1="95" y1="80" x2="60" y2="100"/>
-            <line x1="60" y1="100" x2="25" y2="80"/>
-            <line x1="25" y1="80" x2="25" y2="40"/>
-            <line x1="25" y1="40" x2="60" y2="20"/>
-            <line x1="60" y1="60" x2="60" y2="20"/>
-            <line x1="60" y1="60" x2="95" y2="40"/>
-            <line x1="60" y1="60" x2="95" y2="80"/>
-            <line x1="60" y1="60" x2="25" y2="80"/>
-            <line x1="60" y1="60" x2="25" y2="40"/>
-          </g>
-          <!-- Eye shape -->
-          <path d="M 20 60 Q 60 30 100 60" fill="none" stroke="#00e5ff" stroke-width="1.2" opacity="0.4"/>
-          <path d="M 20 60 Q 60 90 100 60" fill="none" stroke="#00e5ff" stroke-width="1.2" opacity="0.4"/>
-          <!-- Center -->
-          <circle cx="60" cy="60" r="12" fill="url(#glow)"/>
-          <circle cx="60" cy="60" r="6" fill="#ffb300"/>
-          <circle cx="60" cy="60" r="3" fill="#ffe082"/>
-          <!-- Nodes -->
-          <circle cx="60" cy="20" r="3" fill="#00e5ff"/>
-          <circle cx="95" cy="40" r="2.5" fill="#00bcd4"/>
-          <circle cx="95" cy="80" r="3" fill="#00e5ff"/>
-          <circle cx="60" cy="100" r="2.5" fill="#00bcd4"/>
-          <circle cx="25" cy="80" r="3" fill="#00e5ff"/>
-          <circle cx="25" cy="40" r="2.5" fill="#00bcd4"/>
-        </svg>
-      </div>
+    <div class="hero-badge">
+      <span class="dot"></span>
+      macOS Menu Bar App
     </div>
-    <h1>AutoLog</h1>
-    <p class="tagline">Your screen, understood.</p>
+
+    <div class="logo-mark">
+      <div class="logo-ring"></div>
+      <div class="logo-ring"></div>
+      <svg viewBox="0 0 120 120">
+        <defs>
+          <radialGradient id="glow" cx="50%" cy="50%" r="35%">
+            <stop offset="0%" stop-color="#fbbf24" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <g stroke="#60a5fa" stroke-width="0.7" fill="none" opacity="0.2">
+          <line x1="60" y1="20" x2="95" y2="40"/>
+          <line x1="95" y1="40" x2="95" y2="80"/>
+          <line x1="95" y1="80" x2="60" y2="100"/>
+          <line x1="60" y1="100" x2="25" y2="80"/>
+          <line x1="25" y1="80" x2="25" y2="40"/>
+          <line x1="25" y1="40" x2="60" y2="20"/>
+          <line x1="60" y1="60" x2="60" y2="20"/>
+          <line x1="60" y1="60" x2="95" y2="40"/>
+          <line x1="60" y1="60" x2="95" y2="80"/>
+          <line x1="60" y1="60" x2="25" y2="80"/>
+          <line x1="60" y1="60" x2="25" y2="40"/>
+        </g>
+        <path d="M 20 60 Q 60 30 100 60" fill="none" stroke="#60a5fa" stroke-width="1.5" opacity="0.5"/>
+        <path d="M 20 60 Q 60 90 100 60" fill="none" stroke="#60a5fa" stroke-width="1.5" opacity="0.5"/>
+        <circle cx="60" cy="60" r="14" fill="url(#glow)"/>
+        <circle cx="60" cy="60" r="7" fill="#fbbf24"/>
+        <circle cx="60" cy="60" r="3.5" fill="#fde68a"/>
+        <circle cx="60" cy="20" r="2.5" fill="#60a5fa"/>
+        <circle cx="95" cy="40" r="2" fill="#a78bfa"/>
+        <circle cx="95" cy="80" r="2.5" fill="#60a5fa"/>
+        <circle cx="60" cy="100" r="2" fill="#a78bfa"/>
+        <circle cx="25" cy="80" r="2.5" fill="#60a5fa"/>
+        <circle cx="25" cy="40" r="2" fill="#a78bfa"/>
+      </svg>
+    </div>
+
+    <h1>Your screen, understood.</h1>
+    <p class="hero-tagline">
+      Ambient screen capture that builds a searchable activity knowledge graph.
+      All local, all yours.
+    </p>
+    <div class="hero-install">
+      brew install AmitSubhash/tap/autolog
+      <span class="copy-hint">copy</span>
+    </div>
   </div>
 
   <!-- Pipeline -->
-  <div class="pipeline">
-    <div class="pipeline-step">
-      <div class="step-icon">&#128248;</div>
-      <span class="step-label">Capture</span>
+  <div class="pipeline-section fade-in">
+    <div class="section-label" style="text-align:center">How it works</div>
+    <div class="pipeline-row">
+      <div class="pipeline-step">
+        <div class="step-icon">&#128248;</div>
+        <span class="step-label">Capture</span>
+      </div>
+      <span class="pipeline-arrow">&#8594;</span>
+      <div class="pipeline-step">
+        <div class="step-icon">&#128065;</div>
+        <span class="step-label">OCR</span>
+      </div>
+      <span class="pipeline-arrow">&#8594;</span>
+      <div class="pipeline-step">
+        <div class="step-icon">&#129504;</div>
+        <span class="step-label">Summarize</span>
+      </div>
+      <span class="pipeline-arrow">&#8594;</span>
+      <div class="pipeline-step">
+        <div class="step-icon">&#128300;</div>
+        <span class="step-label">Infer</span>
+      </div>
+      <span class="pipeline-arrow">&#8594;</span>
+      <div class="pipeline-step">
+        <div class="step-icon">&#127760;</div>
+        <span class="step-label">Graph</span>
+      </div>
     </div>
-    <span class="pipeline-arrow">&#8594;</span>
-    <div class="pipeline-step">
-      <div class="step-icon">&#128065;</div>
-      <span class="step-label">OCR</span>
-    </div>
-    <span class="pipeline-arrow">&#8594;</span>
-    <div class="pipeline-step">
-      <div class="step-icon">&#129504;</div>
-      <span class="step-label">Summarize</span>
-    </div>
-    <span class="pipeline-arrow">&#8594;</span>
-    <div class="pipeline-step">
-      <div class="step-icon">&#128300;</div>
-      <span class="step-label">Infer</span>
-    </div>
-    <span class="pipeline-arrow">&#8594;</span>
-    <div class="pipeline-step">
-      <div class="step-icon">&#127760;</div>
-      <span class="step-label">Graph</span>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Captures / Hour</div>
+        <div class="stat-value accent-blue" id="stat-captures">0</div>
+        <div class="stat-sub">Full-screen OCR</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Cost per Summary</div>
+        <div class="stat-value accent-emerald">$0.002</div>
+        <div class="stat-sub">Claude Haiku</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">RAM Footprint</div>
+        <div class="stat-value accent-amber">288MB</div>
+        <div class="stat-sub">Menu bar app</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Daily Cost</div>
+        <div class="stat-value accent-rose">$0.77</div>
+        <div class="stat-sub">8-hour workday</div>
+      </div>
     </div>
   </div>
 
   <!-- Features -->
-  <div class="features">
-    <div class="feature-card">
-      <h3><span>&#128203;</span>Activity Knowledge Graph</h3>
-      <p>App sessions, LLM-inferred activities, and cross-activity links via shared files, URLs, and topics. Not flat logs -- structured understanding.</p>
+  <section id="features" class="fade-in">
+    <div class="section-label">Features</div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <h3>
+          <span class="feature-dot" style="background:var(--accent-blue)"></span>
+          Activity Knowledge Graph
+        </h3>
+        <p>App sessions, LLM-inferred activities, and cross-activity links via shared files, URLs, and topics. Not flat logs -- structured understanding.</p>
+      </div>
+      <div class="feature-card">
+        <h3>
+          <span class="feature-dot" style="background:var(--accent-violet)"></span>
+          Obsidian Integration
+        </h3>
+        <p>Activity notes named by what you did, not when. App stats, topic backlinks, daily dashboards -- all with [[wikilinks]] for graph exploration.</p>
+      </div>
+      <div class="feature-card">
+        <h3>
+          <span class="feature-dot" style="background:var(--accent-emerald)"></span>
+          Privacy First
+        </h3>
+        <p>All data stays local. No cloud uploads, no telemetry. Password managers auto-excluded. LLM calls through your own proxy.</p>
+      </div>
+      <div class="feature-card">
+        <h3>
+          <span class="feature-dot" style="background:var(--accent-amber)"></span>
+          5-Minute Feedback
+        </h3>
+        <p>Summaries within 5 minutes of activity. Full-screen OCR captures everything visible -- not just the active window.</p>
+      </div>
     </div>
-    <div class="feature-card">
-      <h3><span>&#128209;</span>Obsidian Integration</h3>
-      <p>Activity notes named by what you did, not when. App stats, topic backlinks, daily dashboards -- all with [[wikilinks]] for graph exploration.</p>
-    </div>
-    <div class="feature-card">
-      <h3><span>&#128274;</span>Privacy First</h3>
-      <p>All data stays local. No cloud uploads, no telemetry. Password managers auto-excluded. LLM calls through your own proxy.</p>
-    </div>
-    <div class="feature-card">
-      <h3><span>&#9889;</span>5-Minute Feedback</h3>
-      <p>Summaries within 5 minutes of activity. Full-screen OCR captures everything visible -- not just the active window. $0.77/day with Haiku.</p>
-    </div>
-  </div>
+  </section>
 
-  <!-- Terminal demo -->
-  <div class="terminal">
-    <div class="terminal-bar">
-      <div class="terminal-dot red"></div>
-      <div class="terminal-dot yellow"></div>
-      <div class="terminal-dot green"></div>
-      <span class="terminal-title">Haiku Summary Output</span>
+  <!-- Terminal Demo -->
+  <section id="demo" class="fade-in">
+    <div class="section-label">Live Output</div>
+    <div class="terminal">
+      <div class="terminal-bar">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">Haiku Summary Output</span>
+      </div>
+      <div class="terminal-body" id="terminal"></div>
     </div>
-    <div class="terminal-body" id="terminal"></div>
-  </div>
-
-  <!-- Stats -->
-  <div class="stats">
-    <div class="stat">
-      <div class="stat-value" id="stat-captures">0</div>
-      <div class="stat-label">Captures / Hour</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value">$0.002</div>
-      <div class="stat-label">Per Summary</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value">288MB</div>
-      <div class="stat-label">RAM Footprint</div>
-    </div>
-    <div class="stat">
-      <div class="stat-value">10</div>
-      <div class="stat-label">DB Tables</div>
-    </div>
-  </div>
-
-  <div class="footer">
-    <a href="https://github.com/AmitSubhash/autolog">View on GitHub</a>
-    <p>Built with Swift, GRDB, Vision, and Claude Haiku</p>
-  </div>
+  </section>
 
 </div>
 
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <a class="cta" href="https://github.com/AmitSubhash/autolog">
+      <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      View on GitHub
+    </a>
+    <p class="sub">Built with Swift, GRDB, Vision, and Claude Haiku</p>
+    <p class="author">Made by Amit Subhash Thachanparambath</p>
+  </div>
+</footer>
+
 <script>
+// Scroll-triggered fade-in
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.15 });
+document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+// Terminal simulation
 const lines = [
   { type: 'input', text: '$ python3 process/test_full_pipeline.py' },
   { type: 'blank' },
@@ -476,43 +612,62 @@ const lines = [
 ];
 
 const terminal = document.getElementById('terminal');
-let delay = 3800; // start after cards animate
+let started = false;
 
-lines.forEach((line, i) => {
-  setTimeout(() => {
-    const div = document.createElement('div');
-    div.className = 'term-line';
-    if (line.type === 'blank') {
-      div.innerHTML = '&nbsp;';
-    } else if (line.type === 'input') {
-      div.innerHTML = `<span class="term-prompt">$</span> <span class="term-cmd">${line.text.slice(2)}</span>`;
-    } else if (line.type === 'highlight') {
-      div.innerHTML = `<span class="term-highlight">${line.text}</span>`;
-    } else if (line.type === 'file') {
-      div.innerHTML = `<span class="term-file">${line.text}</span>`;
-    } else if (line.type === 'num') {
-      div.innerHTML = `<span class="term-num">${line.text}</span>`;
-    } else {
-      div.innerHTML = `<span class="term-output">${line.text}</span>`;
-    }
-    terminal.appendChild(div);
-    terminal.scrollTop = terminal.scrollHeight;
-  }, delay + i * 180);
+const termObserver = new IntersectionObserver((entries) => {
+  if (entries[0].isIntersecting && !started) {
+    started = true;
+    lines.forEach((line, i) => {
+      setTimeout(() => {
+        const div = document.createElement('div');
+        div.className = 'term-line';
+        if (line.type === 'blank') {
+          div.innerHTML = '&nbsp;';
+        } else if (line.type === 'input') {
+          div.innerHTML = `<span class="term-prompt">$</span> <span class="term-cmd">${line.text.slice(2)}</span>`;
+        } else if (line.type === 'highlight') {
+          div.innerHTML = `<span class="term-highlight">${line.text}</span>`;
+        } else if (line.type === 'file') {
+          div.innerHTML = `<span class="term-file">${line.text}</span>`;
+        } else if (line.type === 'num') {
+          div.innerHTML = `<span class="term-num">${line.text}</span>`;
+        } else {
+          div.innerHTML = `<span class="term-output">${line.text}</span>`;
+        }
+        terminal.appendChild(div);
+        terminal.scrollTop = terminal.scrollHeight;
+      }, 200 + i * 160);
+    });
+  }
+}, { threshold: 0.3 });
+termObserver.observe(terminal);
+
+// Animate capture counter on scroll
+const statEl = document.getElementById('stat-captures');
+let counted = false;
+const statObserver = new IntersectionObserver((entries) => {
+  if (entries[0].isIntersecting && !counted) {
+    counted = true;
+    let n = 0;
+    const target = 360;
+    const step = () => {
+      n += Math.ceil((target - n) / 10);
+      if (n >= target) n = target;
+      statEl.textContent = n;
+      if (n < target) requestAnimationFrame(step);
+    };
+    step();
+  }
+}, { threshold: 0.5 });
+statObserver.observe(statEl);
+
+// Copy install command
+document.querySelector('.hero-install').addEventListener('click', function() {
+  navigator.clipboard.writeText('brew install AmitSubhash/tap/autolog');
+  const hint = this.querySelector('.copy-hint');
+  hint.textContent = 'copied!';
+  setTimeout(() => { hint.textContent = 'copy'; }, 1500);
 });
-
-// Animate capture counter
-setTimeout(() => {
-  const el = document.getElementById('stat-captures');
-  let n = 0;
-  const target = 360;
-  const step = () => {
-    n += Math.ceil((target - n) / 10);
-    if (n >= target) n = target;
-    el.textContent = n;
-    if (n < target) requestAnimationFrame(step);
-  };
-  step();
-}, 4200);
 </script>
 </body>
 </html>
