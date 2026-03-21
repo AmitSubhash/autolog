@@ -61,19 +61,49 @@ final class PermissionManager: ObservableObject {
 
     // MARK: - Screen Recording
 
-    /// Check if Screen Recording permission is granted.
-    /// Since we use the system `screencapture` CLI (pre-authorized), we always
-    /// return true and never call CGPreflightScreenCaptureAccess or
-    /// CGRequestScreenCaptureAccess, which trigger the macOS Sequoia permission
-    /// dialog on every app launch.
+    /// Functional check: runs screencapture CLI and verifies it produces a valid image.
+    /// Does NOT use CGPreflightScreenCaptureAccess (triggers permission dialog).
     func checkScreenRecording() -> Bool {
-        true
+        let testPath = NSTemporaryDirectory() + "autolog-permcheck.png"
+        defer { try? FileManager.default.removeItem(atPath: testPath) }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-x", "-t", "png", testPath]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return false
+        }
+
+        guard process.terminationStatus == 0 else { return false }
+
+        // Verify a real image was produced (not a blank/zero-byte file)
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: testPath),
+              let size = attrs[.size] as? Int, size > 100 else {
+            return false
+        }
+        return true
     }
 
-    /// No-op: screencapture CLI does not require per-app Screen Recording permission.
+    /// Open Screen Recording settings and poll for permission grant.
     func requestScreenRecording() {
-        screenRecordingGranted = true
-        logger.info("Screen Recording: using system screencapture CLI (always authorized)")
+        openScreenRecordingSettings()
+
+        // Poll rapidly for 30 seconds after the user opens settings
+        screenRecordingPollTask?.cancel()
+        screenRecordingPollTask = Task { [weak self] in
+            for _ in 0..<30 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard !Task.isCancelled else { break }
+                self?.refreshStatus()
+                if self?.screenRecordingGranted == true { break }
+            }
+        }
     }
 
     // MARK: - Accessibility
