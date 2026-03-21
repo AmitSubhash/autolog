@@ -2,6 +2,11 @@
 
 Your screen, understood.
 
+```bash
+brew tap AmitSubhash/tap
+brew install autolog
+```
+
 AutoLog is a macOS menu bar app that watches what you do on your computer and builds a searchable activity knowledge graph from it. It captures your screen via OCR, infers what you're working on using an LLM, connects related activities across apps, and syncs everything to an Obsidian vault as linked notes.
 
 Think of it as ambient memory for your workday -- not a surveillance tool, but a personal context engine that remembers what you were doing, in which apps, with which files, so you never lose track.
