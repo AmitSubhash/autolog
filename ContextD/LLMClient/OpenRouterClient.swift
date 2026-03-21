@@ -26,65 +26,33 @@ final class OpenRouterClient: LLMClient, Sendable {
     /// Maximum number of retry attempts for transient errors.
     private let maxRetries = 3
 
-    // MARK: - API Key (Keychain storage with migration from plaintext file)
+    // MARK: - API Key (file-based, no Keychain)
 
-    private static let keychainKey = "openrouter_api_key"
+    private static let apiKeyFile = "openrouter_api_key"
 
-    /// Legacy path to the plaintext API key file: ~/Library/Application Support/ContextD/api_key
-    /// Kept only for one-time migration to Keychain.
-    private static var legacyApiKeyFileURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("ContextD", isDirectory: true)
-            .appendingPathComponent("api_key")
-    }
-
-    /// One-time migration: if a plaintext API key file exists, move it to Keychain and delete the file.
-    static func migrateAPIKeyToKeychainIfNeeded() {
-        let logger = DualLogger(category: "OpenRouterClient")
-
-        // Already in Keychain? Nothing to do.
-        guard !KeychainHelper.exists(key: keychainKey) else { return }
-
-        // Check for legacy plaintext file
-        let fileURL = legacyApiKeyFileURL
-        guard let raw = try? String(contentsOf: fileURL, encoding: .utf8) else { return }
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        // Migrate to Keychain
-        do {
-            try KeychainHelper.save(key: keychainKey, value: trimmed)
-            try FileManager.default.removeItem(at: fileURL)
-            logger.info("Migrated API key from plaintext file to Keychain")
-        } catch {
-            logger.error("Failed to migrate API key to Keychain: \(error.localizedDescription)")
-        }
-    }
-
-    /// Read the API key from Keychain.
+    /// Read the API key from file storage.
     static func readAPIKey() -> String? {
-        KeychainHelper.read(key: keychainKey)
+        KeychainHelper.read(key: apiKeyFile)
     }
 
-    /// Save the API key to Keychain.
+    /// Save the API key to file storage.
     static func saveAPIKey(_ key: String) throws {
         try KeychainHelper.save(
-            key: keychainKey,
+            key: apiKeyFile,
             value: key.trimmingCharacters(in: .whitespacesAndNewlines)
         )
     }
 
-    /// Check whether an API key is available (keychain or proxy).
+    /// Check whether an API key is available (file or proxy).
     /// Returns true in proxy mode (no key needed).
-    /// Skips keychain access when using proxy (avoids macOS keychain prompt).
     static func hasAPIKey() -> Bool {
         if isUsingProxy { return true }
-        return KeychainHelper.exists(key: keychainKey)
+        return KeychainHelper.exists(key: apiKeyFile)
     }
 
-    /// Delete the API key from Keychain.
+    /// Delete the API key.
     static func deleteAPIKey() {
-        KeychainHelper.delete(key: keychainKey)
+        KeychainHelper.delete(key: apiKeyFile)
     }
 
     // MARK: - LLMClient Protocol

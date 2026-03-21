@@ -48,11 +48,11 @@ final class PermissionManager: ObservableObject {
 
     // MARK: - Periodic Re-check
 
-    /// Poll permissions every 30 seconds so revocations are detected promptly.
+    /// Poll permissions every 5 seconds so the UI updates promptly.
     private func startPeriodicCheck() {
         periodicCheckTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
                 guard !Task.isCancelled else { break }
                 self?.refreshStatus()
             }
@@ -78,18 +78,37 @@ final class PermissionManager: ObservableObject {
 
     // MARK: - Accessibility
 
-    /// Check if Accessibility permission is granted (does not prompt).
+    /// Check if Accessibility permission is granted.
+    /// Uses a functional test (reading frontmost app's AX attributes) instead of
+    /// AXIsProcessTrusted() which returns stale results after re-signing on macOS 15+.
     func checkAccessibility() -> Bool {
-        AXIsProcessTrusted()
+        // First try the API check
+        if AXIsProcessTrusted() { return true }
+
+        // AXIsProcessTrusted() can return false even when granted (macOS 15+ re-signing).
+        // Try actually using the AX API as a functional test.
+        guard let frontApp = NSWorkspace.shared.frontmostApplication else { return false }
+        let appElement = AXUIElementCreateApplication(frontApp.processIdentifier)
+        var value: AnyObject?
+        let result = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &value)
+        // If we get .success or .noValue (app has no window), AX is working.
+        // Only .apiDisabled or .notImplemented means truly not granted.
+        return result == .success || result == .noValue
     }
 
-    /// Request Accessibility permission. Shows the system dialog directing user to System Settings.
+    /// Request Accessibility permission. Opens System Settings directly.
     func requestAccessibility() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
-        let granted = AXIsProcessTrustedWithOptions(options)
-        accessibilityGranted = granted
-        if !granted {
-            logger.warning("Accessibility permission not granted. User must enable manually.")
+        openAccessibilitySettings()
+
+        // Poll rapidly for 30 seconds after the user opens settings
+        screenRecordingPollTask?.cancel()
+        screenRecordingPollTask = Task { [weak self] in
+            for _ in 0..<30 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard !Task.isCancelled else { break }
+                self?.refreshStatus()
+                if self?.accessibilityGranted == true { break }
+            }
         }
     }
 

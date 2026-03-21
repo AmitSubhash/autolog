@@ -1,76 +1,45 @@
 import Foundation
-import Security
 
-/// Secure storage for API keys using the macOS Keychain.
+/// Simple file-based storage for the API key.
+/// Stored at ~/Library/Application Support/ContextD/api_key.
+/// No Keychain, no password prompts.
 enum KeychainHelper {
-    private static let logger = DualLogger(category: "Keychain")
-    private static let service = "com.contextd.app"
+    private static let logger = DualLogger(category: "APIKeyStore")
 
-    /// Save a value to the Keychain.
+    private static var storageDir: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("ContextD", isDirectory: true)
+    }
+
+    private static func fileURL(for key: String) -> URL {
+        storageDir.appendingPathComponent(key)
+    }
+
     static func save(key: String, value: String) throws {
-        guard let data = value.data(using: .utf8) else {
-            throw KeychainError.encodingFailed
-        }
-
-        // Delete any existing item first
-        let deleteQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key,
-        ]
-        SecItemDelete(deleteQuery as CFDictionary)
-
-        // Add new item
-        let addQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key,
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-        ]
-
-        let status = SecItemAdd(addQuery as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            logger.error("Keychain save failed: \(status)")
-            throw KeychainError.saveFailed(status)
-        }
-
-        logger.debug("Saved key '\(key)' to Keychain")
+        let dir = storageDir
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = fileURL(for: key)
+        try value.write(to: url, atomically: true, encoding: .utf8)
+        // Restrict to owner-only read/write
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600], ofItemAtPath: url.path
+        )
+        logger.debug("Saved key '\(key)' to file")
     }
 
-    /// Read a value from the Keychain.
     static func read(key: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-
-        guard status == errSecSuccess, let data = result as? Data,
-              let value = String(data: data, encoding: .utf8) else {
-            return nil
-        }
-
-        return value
+        let url = fileURL(for: key)
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// Delete a value from the Keychain.
     static func delete(key: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: key,
-        ]
-        SecItemDelete(query as CFDictionary)
-        logger.debug("Deleted key '\(key)' from Keychain")
+        let url = fileURL(for: key)
+        try? FileManager.default.removeItem(at: url)
+        logger.debug("Deleted key '\(key)'")
     }
 
-    /// Check if a key exists in the Keychain.
     static func exists(key: String) -> Bool {
         read(key: key) != nil
     }
@@ -83,9 +52,9 @@ enum KeychainError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .encodingFailed:
-            return "Failed to encode value for Keychain storage"
+            return "Failed to encode value"
         case .saveFailed(let status):
-            return "Keychain save failed with status: \(status)"
+            return "Save failed with status: \(status)"
         }
     }
 }
