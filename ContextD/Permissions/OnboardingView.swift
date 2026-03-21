@@ -47,15 +47,6 @@ struct OnboardingView: View {
 
             VStack(spacing: 16) {
                 PermissionRow(
-                    icon: "rectangle.dashed.badge.record",
-                    title: "Screen Recording",
-                    description: "Capture screenshots to extract text from your screen.",
-                    isGranted: permissionManager.screenRecordingGranted,
-                    onRequest: { permissionManager.requestScreenRecording() },
-                    onOpenSettings: { permissionManager.openScreenRecordingSettings() }
-                )
-
-                PermissionRow(
                     icon: "accessibility",
                     title: "Accessibility",
                     description: "Read focused window titles and app information.",

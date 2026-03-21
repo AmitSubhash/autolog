@@ -30,8 +30,6 @@ cat <<'EOF'
     <string>14.0</string>
     <key>LSUIElement</key>
     <true/>
-    <key>NSScreenCaptureUsageDescription</key>
-    <string>AutoLog captures screenshots to extract text and build your activity knowledge graph. All data stays on your Mac.</string>
     <key>CFBundleIconFile</key>
     <string>contextd</string>
     <key>NSHighResolutionCapable</key>
