@@ -1,201 +1,159 @@
-# ContextD
+# MirrorLog
 
-![X (formerly Twitter) URL](https://img.shields.io/twitter/url?url=https%3A%2F%2Fx.com%2Fthesophiaxu&label=Follow%20me%20on%20Twitter)
+Your screen, understood.
 
-![Demo Image](./docs/demo_img.png)
+MirrorLog is a macOS menu bar app that watches what you do on your computer and builds a searchable activity knowledge graph from it. It captures your screen via OCR, infers what you're working on using an LLM, connects related activities across apps, and syncs everything to an Obsidian vault as linked notes.
 
-An efficient macOS app that continuously captures your screen activity, summarizes it
-with an LLM, and makes it available for other local tools.
+Think of it as ambient memory for your workday -- not a surveillance tool, but a personal context engine that remembers what you were doing, in which apps, with which files, so you never lose track.
 
-**How it works:** Every 2 seconds, ContextD takes a screenshot, diffs it against the
-previous one, runs OCR on the changed regions, and stores the extracted text in a
-local SQLite database. A background process progressively summarizes your activity
-using a cheap LLM (~$2/day with Claude Haiku), and makes it available via a local HTTP API.
+## What it captures
 
-All data stays on your machine. The only external calls are to the OpenRouter API.
+Every few seconds, MirrorLog takes a screenshot, runs full-screen OCR, and extracts:
 
-> Want to make your own changes? Point your coding agent to ./docs/SPEC.md and ask it to build your own version!
+- **Screen text** -- everything visible, not just the active window
+- **App metadata** -- which app is frontmost, its window title, document path, browser URL
+- **All visible windows** -- every app with a window open, via Accessibility API
+- **Focused element** -- what UI element has keyboard focus (text field, web area, etc.)
 
-## Requirements
+This raw data flows through a pipeline:
 
-- macOS 14 (Sonoma) or later
-- Swift 5.9+
-- An [OpenRouter](https://openrouter.ai/) API key (for summarization and enrichment)
+```
+screenshot --> OCR --> capture record --> summarization (Haiku) --> activity inference --> Obsidian sync
+                                              |                          |
+                                         app sessions              knowledge graph
+                                       (time per app)          (cross-activity links)
+```
 
-## Quick Start
+## The knowledge graph
+
+MirrorLog doesn't just store flat summaries. It builds structure:
+
+**App Sessions** -- contiguous stretches of using one app, with aggregated metadata (all window titles, document paths, URLs seen during the session).
+
+**Activities** -- LLM-inferred tasks that span one or more app sessions. "Debugging the capture pipeline" might involve Terminal (building), Safari (reading docs), and Xcode (editing code) -- MirrorLog groups these into one coherent activity.
+
+**Cross-activity links** -- activities connected by shared files, URLs, or topics. If you edited `CaptureEngine.swift` in two different sessions hours apart, MirrorLog links those activities.
+
+**Entities** -- files, URLs, and topics extracted from activities, queryable independently ("show me everything involving this file").
+
+## Obsidian integration
+
+MirrorLog syncs to an Obsidian vault with `[[wikilinks]]` so you can explore your work history in Obsidian's graph view:
+
+- **Activity notes** -- named by what you did, not when. Each note includes the apps used, files touched, URLs visited, and related activities.
+- **App notes** -- per-app usage stats, recent windows, files, and activities.
+- **Topic notes** -- every extracted topic links back to the activities where it appeared.
+- **Daily notes** -- app usage table + activity list for the day.
+
+## Architecture
+
+| Component | What it does |
+|-----------|-------------|
+| `ScreenCapture.swift` | Screenshots via `/usr/sbin/screencapture` CLI (avoids macOS Sequoia permission re-prompts) |
+| `OCRProcessor.swift` | Full-screen text recognition via Apple Vision framework |
+| `AccessibilityReader.swift` | Window titles and app metadata via AXUIElement + NSWorkspace |
+| `AppMetadataReader.swift` | Document paths, URLs, focused element role via Accessibility API |
+| `AppSessionDetector.swift` | Real-time app session boundary detection (actor) |
+| `SummarizationEngine.swift` | 5-min chunk summarization via Haiku LLM (activity type, files, URLs, topics) |
+| `ActivityInferenceEngine.swift` | Batched LLM inference to group sessions into named activities |
+| `ActivityGraphBuilder.swift` | Entity extraction and cross-activity link discovery |
+| `obsidian-sync.py` | Vault sync with rich activity/app/topic/daily notes |
+
+### Database
+
+SQLite via GRDB with 10 migrations, FTS5 full-text search:
+
+| Table | Purpose |
+|-------|---------|
+| `captures` | Raw OCR text + metadata per screenshot |
+| `summaries` | LLM-generated summaries with activity type, files, URLs |
+| `app_sessions` | Contiguous app usage stretches |
+| `activities` | LLM-inferred named tasks |
+| `activity_sessions` | M:N link between activities and sessions |
+| `activity_entities` | Files, URLs, topics per activity |
+| `activity_links` | Cross-activity connections |
+
+### API
+
+Local HTTP API on port 21890:
+
+```
+GET  /v1/summaries          -- recent summaries
+GET  /v1/sessions           -- app sessions with metadata
+GET  /v1/app-usage          -- time-per-app breakdown
+GET  /v1/activities         -- inferred activities
+GET  /v1/activities/:id/sessions  -- sessions for an activity
+GET  /v1/activities/:id/related   -- related activities via links
+GET  /v1/graph              -- full activity graph (nodes + edges)
+GET  /v1/entities           -- query by entity type/value
+POST /v1/search             -- full-text search across summaries
+POST /v1/semantic-search    -- TF-IDF similarity search
+```
+
+## Setup
+
+### Requirements
+
+- macOS 14+ (Sonoma or later)
+- Swift 6.0+
+- Accessibility permission (for window titles)
+- A `claude -p` proxy running locally for LLM calls (or OpenRouter API key)
+
+### Build and run
 
 ```bash
-# Clone and build
-git clone https://github.com/thesophiaxu/contextd && cd contextd
-make build
+# Build
+swift build
 
-# Create an .app bundle (needed for macOS permission prompts)
+# Create app bundle with icon
 make bundle
 
 # Launch
 open .build/ContextD.app
 ```
 
-On first launch, ContextD will ask for two macOS permissions:
+Grant Accessibility permission when prompted. Screen Recording permission is handled automatically via the system `screencapture` CLI.
 
-1. **Screen Recording** — to capture screenshots
-2. **Accessibility** — to read focused window titles
-
-Grant both, then enter your OpenRouter API key in Settings (Cmd+,).
-
-## Usage
-
-### HTTP API
-
-ContextD runs a local API server on `http://127.0.0.1:21890` with interactive docs
-at [http://127.0.0.1:21890/docs](http://127.0.0.1:21890/docs).
+### Obsidian sync
 
 ```bash
-# Health check
-curl http://127.0.0.1:21890/health
-
-# Full-text search over activity summaries
-curl -X POST http://127.0.0.1:21890/v1/search \
-  -H 'Content-Type: application/json' \
-  -d '{"text": "auth token OAuth"}'
-
-# List recent summaries
-curl 'http://127.0.0.1:21890/v1/summaries?minutes=60'
-
-# Browse captures near a timestamp
-curl 'http://127.0.0.1:21890/v1/activity?window_minutes=10&kind=captures'
+# Sync last 4 hours to vault
+python3 scripts/obsidian-sync.py 4
 ```
 
-See the [OpenAPI spec](http://127.0.0.1:21890/openapi.json) for full endpoint
-documentation.
+Set up as a launchd agent for automatic sync (plist templates in `launchd/`).
 
-### Menu Bar
+### Configuration
 
-Click the eye icon in the menu bar to see capture status, pause/resume, open the
-enrichment panel, or access settings.
+MirrorLog uses `UserDefaults` for configuration. Key settings:
 
-### Enriching a Prompt
+| Setting | Default | What it controls |
+|---------|---------|-----------------|
+| `llmEndpointURL` | -- | LLM proxy URL (e.g., `http://127.0.0.1:11434/v1/chat/completions`) |
+| `captureSpeed` | `medium` | Capture frequency: `fast` (5s), `medium` (10s), `slow` (30s) |
+| `adaptiveIntervalEnabled` | `true` | Back off capture rate when screen is idle |
+| `apiServerPort` | `21890` | Local API server port |
 
-1. Press **Cmd+Shift+Space** (or click "Enrich Prompt..." in the menu bar).
-2. Type or paste your prompt.
-3. Select a time range (how far back to search).
-4. Click **Enrich** (Cmd+Return).
-5. Copy the enriched prompt (Cmd+Shift+C) and paste it into your AI assistant.
+## Cost
 
-The enriched prompt will have context footnotes appended, like:
+LLM calls go through a local `claude -p` proxy using Haiku:
 
-```
-Your original prompt here...
+- **Summarization**: ~$0.002/call, ~12 calls/hour = ~$0.58/day
+- **Activity inference**: ~$0.002/call, ~4 calls/hour = ~$0.19/day
+- **Total**: ~$0.77/day at typical usage
 
----
-## Context References
+## Privacy
 
-[^1]: (2 min ago, VS Code) The parseConfig function in src/config/parser.ts was modified...
-[^2]: (5 min ago, Terminal) npm test showed 3 failing tests in auth.test.ts...
-```
+- All data stays local (SQLite database in `~/Library/Application Support/ContextD/`)
+- Password managers and System Settings are excluded from capture by default
+- MirrorLog's own windows are excluded from screenshots
+- LLM calls go through your local proxy, not to a third-party API
+- Captures are pruned after 72 hours; summaries persist indefinitely
+- No telemetry, no analytics, no network calls except to your LLM proxy
 
-## Configuration
+## Credits
 
-Open Settings (Cmd+, or menu bar > Settings) to configure:
-
-| Tab       | What you can change                                                    |
-|-----------|------------------------------------------------------------------------|
-| General   | API key, capture interval, keyframe threshold, API server port         |
-| Models    | LLM models for summarization and enrichment (Pass 1 / Pass 2)         |
-| Limits    | Token limits, context window sizes, capture formatting limits          |
-| Prompts   | Custom system prompts for summarization and enrichment                 |
-| Storage   | Data retention period, summarization timing                            |
-
-Default models:
-
-| Purpose                  | Model                        |
-|--------------------------|------------------------------|
-| Summarization            | `anthropic/claude-haiku-4-5` |
-| Enrichment Pass 1        | `anthropic/claude-haiku-4-5` |
-| Enrichment Pass 2        | `anthropic/claude-sonnet-4-6`|
-
-## How the Capture Pipeline Works
-
-```
-Screenshot ──> Pixel Diff (SIMD) ──> Frame Decision ──> Selective OCR ──> Store
-                   │
-                   ├── 0% changed ──────────> Skip
-                   ├── <50% changed ────────> Delta (OCR changed regions only)
-                   └── ≥50% / app switch ──> Keyframe (full-screen OCR)
-```
-
-- **Keyframes** store full-screen OCR text.
-- **Deltas** store only the text from changed screen regions, linked to their parent keyframe.
-- **Hash deduplication** prevents storing identical captures.
-- **No images are stored** — screenshots are processed in memory and discarded.
-
-## Development
-
-```bash
-make help           # Show all available targets
-make run            # Build and run (debug)
-make test           # Run unit tests
-make watch          # Rebuild on file changes (requires: brew install fswatch)
-make lint           # Check for warnings and TODOs
-make loc            # Count lines of code by module
-```
-
-### Database Inspection
-
-```bash
-make db-stats       # Row counts, sizes, top apps
-make db-recent      # 10 most recent captures
-make db-search Q="search term"  # Full-text search
-make db-shell       # Open SQLite shell
-
-# Or use the interactive inspector
-./scripts/db-inspect.sh
-```
-
-### Logs
-
-```bash
-make logs           # Stream live logs
-make logs-recent    # Last 5 minutes of logs
-make logs-errors    # Error-level logs from last hour
-```
-
-### Reset
-
-```bash
-./scripts/reset-all.sh          # Reset permissions + UserDefaults
-./scripts/reset-all.sh --db     # Also delete the database
-./scripts/reset-all.sh --full   # Also clean build artifacts
-```
-
-## Project Structure
-
-```
-ContextD/
-├── App/            # Entry point, AppDelegate, service container (DI)
-├── Capture/        # Screenshot, pixel diff (SIMD), OCR, accessibility
-├── Storage/        # GRDB database, migrations, FTS5, record types
-├── Summarization/  # Background LLM summarization, chunking
-├── Enrichment/     # Two-pass prompt enrichment pipeline
-├── LLMClient/      # OpenRouter API client
-├── Server/         # Hummingbird HTTP API, OpenAPI spec
-├── UI/             # Menu bar, settings, enrichment panel, debug view
-├── Permissions/    # macOS permission management, onboarding
-└── Utilities/      # Logger, prompt templates, text diff, formatters
-```
-
-For the full technical specification, see [docs/SPEC.md](docs/SPEC.md).
-
-## Data Storage
-
-All data is stored locally in `~/Library/Application Support/ContextD/`:
-
-| File              | Contents                              |
-|-------------------|---------------------------------------|
-| `contextd.sqlite` | Captures, summaries, token usage (SQLite + FTS5) |
-| `api_key`          | OpenRouter API key (plain text)       |
-
-Default retention is 7 days (configurable in Settings > Storage).
+Forked from [thesophiaxu/contextd](https://github.com/thesophiaxu/contextd). Activity knowledge graph, enhanced OCR, Obsidian integration, and ScreenCaptureKit migration by [Amit Subhash](https://github.com/AmitSubhash).
 
 ## License
 
