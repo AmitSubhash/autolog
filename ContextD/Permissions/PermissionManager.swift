@@ -1,8 +1,8 @@
 import Foundation
 import AppKit
 
-/// Manages checking and requesting macOS permissions required by ContextD.
-/// Required permissions: Screen Recording (ScreenCaptureKit) and Accessibility (AXUIElement).
+/// Manages checking and requesting macOS permissions required by AutoLog.
+/// Required: Screen Recording (for screencapture CLI) and Accessibility (AXUIElement).
 @MainActor
 final class PermissionManager: ObservableObject {
     static let shared = PermissionManager()
@@ -12,31 +12,33 @@ final class PermissionManager: ObservableObject {
     @Published var screenRecordingGranted: Bool = false
     @Published var accessibilityGranted: Bool = false
 
-    /// Active periodic re-check task. Cancelled on deinit.
+    /// Periodic re-check task. Only started after onboarding completes.
     private var periodicCheckTask: Task<Void, Never>?
 
-    /// Active polling task used after requesting screen recording permission.
+    /// Rapid-poll tasks for each permission (after user clicks Grant).
     private var screenRecordingPollTask: Task<Void, Never>?
+    private var accessibilityPollTask: Task<Void, Never>?
 
     var allPermissionsGranted: Bool {
         screenRecordingGranted && accessibilityGranted
     }
 
     private init() {
+        // Check once at init. Do NOT start periodic polling here --
+        // polling starts only after onboarding via startPeriodicCheck().
         refreshStatus()
-        startPeriodicCheck()
     }
 
     deinit {
         periodicCheckTask?.cancel()
         screenRecordingPollTask?.cancel()
+        accessibilityPollTask?.cancel()
     }
 
     /// Re-check all permission statuses.
     func refreshStatus() {
         let newScreen = checkScreenRecording()
         let newAccessibility = checkAccessibility()
-        // Only publish changes when values actually differ to avoid unnecessary UI updates.
         if newScreen != screenRecordingGranted {
             screenRecordingGranted = newScreen
         }
@@ -48,11 +50,12 @@ final class PermissionManager: ObservableObject {
 
     // MARK: - Periodic Re-check
 
-    /// Poll permissions every 5 seconds so the UI updates promptly.
-    private func startPeriodicCheck() {
+    /// Start periodic polling. Call ONLY after onboarding completes.
+    func startPeriodicCheck() {
+        guard periodicCheckTask == nil else { return }
         periodicCheckTask = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
                 guard !Task.isCancelled else { break }
                 self?.refreshStatus()
             }
@@ -61,19 +64,25 @@ final class PermissionManager: ObservableObject {
 
     // MARK: - Screen Recording
 
-    /// Read-only check using CGPreflightScreenCaptureAccess (does NOT trigger a prompt).
-    /// Only CGRequestScreenCaptureAccess triggers the system dialog.
+    /// Read-only check. CGPreflightScreenCaptureAccess does not prompt.
     func checkScreenRecording() -> Bool {
         CGPreflightScreenCaptureAccess()
     }
 
-    /// Open Screen Recording settings and poll for permission grant.
+    /// Register the app in TCC (shows system prompt once), then open Settings.
+    /// After the user responds, CGPreflightScreenCaptureAccess reflects the grant.
     func requestScreenRecording() {
+        // This is the ONLY way to make the app appear in
+        // System Settings > Privacy > Screen Recording.
+        // Safe to call multiple times; after first response it's a no-op.
+        CGRequestScreenCaptureAccess()
+
         openScreenRecordingSettings()
 
+        // Rapid-poll for 60 seconds after user opens settings
         screenRecordingPollTask?.cancel()
         screenRecordingPollTask = Task { [weak self] in
-            for _ in 0..<30 {
+            for _ in 0..<60 {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 guard !Task.isCancelled else { break }
                 self?.refreshStatus()
@@ -85,31 +94,22 @@ final class PermissionManager: ObservableObject {
     // MARK: - Accessibility
 
     /// Check if Accessibility permission is granted.
-    /// Uses a functional test (reading frontmost app's AX attributes) instead of
-    /// AXIsProcessTrusted() which returns stale results after re-signing on macOS 15+.
+    /// AXIsProcessTrusted() is authoritative in production builds.
     func checkAccessibility() -> Bool {
-        // First try the API check
-        if AXIsProcessTrusted() { return true }
-
-        // AXIsProcessTrusted() can return false even when granted (macOS 15+ re-signing).
-        // Try actually using the AX API as a functional test.
-        guard let frontApp = NSWorkspace.shared.frontmostApplication else { return false }
-        let appElement = AXUIElementCreateApplication(frontApp.processIdentifier)
-        var value: AnyObject?
-        let result = AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &value)
-        // If we get .success or .noValue (app has no window), AX is working.
-        // Only .apiDisabled or .notImplemented means truly not granted.
-        return result == .success || result == .noValue
+        AXIsProcessTrusted()
     }
 
-    /// Request Accessibility permission. Opens System Settings directly.
+    /// Open Accessibility settings and rapid-poll for grant.
     func requestAccessibility() {
+        // Prompt + open settings
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
+        AXIsProcessTrustedWithOptions(options)
         openAccessibilitySettings()
 
-        // Poll rapidly for 30 seconds after the user opens settings
-        screenRecordingPollTask?.cancel()
-        screenRecordingPollTask = Task { [weak self] in
-            for _ in 0..<30 {
+        // Rapid-poll for 60 seconds
+        accessibilityPollTask?.cancel()
+        accessibilityPollTask = Task { [weak self] in
+            for _ in 0..<60 {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 guard !Task.isCancelled else { break }
                 self?.refreshStatus()
@@ -120,14 +120,12 @@ final class PermissionManager: ObservableObject {
 
     // MARK: - Open System Settings
 
-    /// Open System Settings to the Screen Recording privacy pane.
     func openScreenRecordingSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
             NSWorkspace.shared.open(url)
         }
     }
 
-    /// Open System Settings to the Accessibility privacy pane.
     func openAccessibilitySettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)

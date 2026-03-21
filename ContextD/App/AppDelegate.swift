@@ -24,8 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             showOnboardingWindow()
         } else {
             logger.info("Starting services (onboarded=\(hasOnboarded), permissions=\(permissionsOK))")
-            // Always start services if user has been through onboarding at least once.
-            // Permissions may report false after restart even when granted on macOS 15+.
+            PermissionManager.shared.startPeriodicCheck()
             ServiceContainer.shared.startServices()
         }
     }
@@ -39,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
                 self?.onboardingWindow?.close()
                 self?.onboardingWindow = nil
+                PermissionManager.shared.startPeriodicCheck()
                 ServiceContainer.shared.startServices()
             }
         )
