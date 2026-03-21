@@ -686,9 +686,7 @@
         <div class="terminal-dot green"></div>
         <span class="terminal-title">Haiku Summary Output</span>
       </div>
-      <div class="terminal-body" id="terminal">
-        <div class="term-line" style="opacity:1"><span class="term-prompt">$</span> <span class="term-cmd">curl -s localhost:21890/health | jq .</span></div>
-      </div>
+      <div class="terminal-body" id="terminal"></div>
     </div>
   </section>
 
@@ -748,6 +746,8 @@ let started = false;
 const termObserver = new IntersectionObserver((entries) => {
   if (entries[0].isIntersecting && !started) {
     started = true;
+    // Clear any pre-populated content
+    terminal.innerHTML = '';
     lines.forEach((line, i) => {
       setTimeout(() => {
         const div = document.createElement('div');
