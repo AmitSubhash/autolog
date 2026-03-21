@@ -61,40 +61,16 @@ final class PermissionManager: ObservableObject {
 
     // MARK: - Screen Recording
 
-    /// Functional check: runs screencapture CLI and verifies it produces a valid image.
-    /// Does NOT use CGPreflightScreenCaptureAccess (triggers permission dialog).
+    /// Read-only check using CGPreflightScreenCaptureAccess (does NOT trigger a prompt).
+    /// Only CGRequestScreenCaptureAccess triggers the system dialog.
     func checkScreenRecording() -> Bool {
-        let testPath = NSTemporaryDirectory() + "autolog-permcheck.png"
-        defer { try? FileManager.default.removeItem(atPath: testPath) }
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        process.arguments = ["-x", "-t", "png", testPath]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-        } catch {
-            return false
-        }
-
-        guard process.terminationStatus == 0 else { return false }
-
-        // Verify a real image was produced (not a blank/zero-byte file)
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: testPath),
-              let size = attrs[.size] as? Int, size > 100 else {
-            return false
-        }
-        return true
+        CGPreflightScreenCaptureAccess()
     }
 
     /// Open Screen Recording settings and poll for permission grant.
     func requestScreenRecording() {
         openScreenRecordingSettings()
 
-        // Poll rapidly for 30 seconds after the user opens settings
         screenRecordingPollTask?.cancel()
         screenRecordingPollTask = Task { [weak self] in
             for _ in 0..<30 {
