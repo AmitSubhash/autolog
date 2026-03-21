@@ -4,7 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AutoLog - Your screen, understood.</title>
-<meta name="description" content="Ambient screen capture with activity knowledge graph. macOS menu bar app that remembers what you were working on.">
+<meta name="description" content="macOS menu bar app that captures your screen, runs OCR, and builds a searchable activity knowledge graph. All local, all yours.">
+<meta property="og:title" content="AutoLog - Your screen, understood.">
+<meta property="og:description" content="Ambient screen capture with activity knowledge graph. macOS menu bar app that remembers what you were working on.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://amitsubhash.github.io/autolog/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="AutoLog - Your screen, understood.">
+<meta name="twitter:description" content="macOS menu bar app. Screen capture, OCR, LLM summaries, knowledge graph. All local.">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
@@ -86,7 +93,7 @@
   /* Hero */
   .hero {
     text-align: center;
-    padding: 100px 0 80px;
+    padding: 100px 0 60px;
   }
   .hero-badge {
     display: inline-flex; align-items: center; gap: 8px;
@@ -109,7 +116,7 @@
     position: relative;
     margin-bottom: 32px;
   }
-  .logo-mark svg { width: 96px; height: 96px; }
+  .logo-mark > svg { width: 96px; height: 96px; }
   .logo-ring {
     position: absolute;
     top: -12px; left: -12px;
@@ -132,39 +139,61 @@
     margin-bottom: 16px;
   }
   .hero-tagline {
-    font-size: 1.25rem; font-weight: 300;
+    font-size: 1.15rem; font-weight: 300;
     color: var(--text-secondary);
     margin-bottom: 36px;
-    max-width: 520px;
+    max-width: 540px;
     margin-left: auto; margin-right: auto;
+    line-height: 1.6;
   }
-  .hero-install {
+
+  /* Install buttons */
+  .install-row {
+    display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+  }
+  .install-brew {
     display: inline-flex; align-items: center; gap: 12px;
     padding: 12px 24px;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 10px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 0.88rem;
+    font-size: 0.85rem;
     color: var(--accent-amber);
     cursor: pointer;
     transition: all 0.15s;
     user-select: all;
   }
-  .hero-install:hover {
+  .install-brew:hover {
     border-color: var(--border-hover);
     background: var(--bg-elevated);
   }
-  .hero-install .copy-hint {
+  .install-brew .copy-hint {
     font-family: 'Inter', sans-serif;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
+  .install-dmg {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 24px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.85rem; font-weight: 500;
+    transition: all 0.15s;
+  }
+  .install-dmg:hover {
+    border-color: var(--border-hover);
+    color: var(--text-primary);
+  }
+  .install-dmg svg { width: 16px; height: 16px; fill: currentColor; }
 
   /* Pipeline */
-  .pipeline-section { padding: 48px 0; }
+  .pipeline-section { padding: 48px 0 32px; }
   .section-label {
     font-size: 0.72rem;
     font-weight: 600;
@@ -207,6 +236,14 @@
     font-size: 0.9rem;
     opacity: 0.4;
   }
+  .pipeline-desc {
+    max-width: 640px;
+    margin: 24px auto 0;
+    text-align: center;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    color: var(--text-secondary);
+  }
 
   /* Stats grid */
   .stats-grid {
@@ -217,6 +254,7 @@
   }
   @media (max-width: 640px) {
     .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .nav-links a { padding: 6px 8px; font-size: 0.8rem; }
   }
   .stat-card {
     background: var(--bg-card);
@@ -268,6 +306,7 @@
     border-radius: 50%;
     display: inline-block;
     margin-right: 8px;
+    flex-shrink: 0;
   }
   .feature-card h3 {
     font-size: 0.95rem; font-weight: 600;
@@ -278,6 +317,46 @@
     font-size: 0.85rem;
     line-height: 1.65;
     color: var(--text-secondary);
+  }
+
+  /* Getting started */
+  .getting-started {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    margin-top: 48px;
+  }
+  .getting-started h2 {
+    font-size: 1.1rem; font-weight: 600;
+    margin-bottom: 20px;
+  }
+  .steps-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+  }
+  .step-item {
+    display: flex; gap: 12px;
+  }
+  .step-num {
+    width: 28px; height: 28px;
+    background: rgba(96,165,250,0.1);
+    border: 1px solid rgba(96,165,250,0.2);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 700;
+    color: var(--accent-blue);
+    flex-shrink: 0;
+  }
+  .step-text {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+  .step-text strong {
+    color: var(--text-primary);
+    font-weight: 600;
   }
 
   /* Terminal */
@@ -334,27 +413,30 @@
     padding: 60px 0;
     border-top: 1px solid var(--border);
   }
-  footer .cta {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 12px 28px;
+  .footer-links {
+    display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+  .footer-links a {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 20px;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 10px;
     color: var(--text-primary);
     text-decoration: none;
-    font-weight: 600; font-size: 0.9rem;
+    font-weight: 500; font-size: 0.85rem;
     transition: all 0.15s;
   }
-  footer .cta:hover {
+  .footer-links a:hover {
     border-color: var(--border-hover);
     transform: translateY(-1px);
   }
-  footer .cta svg {
-    width: 18px; height: 18px;
+  .footer-links svg {
+    width: 16px; height: 16px;
     fill: currentColor;
   }
   footer .sub {
-    margin-top: 16px;
     font-size: 0.8rem;
     color: var(--text-muted);
   }
@@ -400,6 +482,7 @@
     </a>
     <div class="nav-links">
       <a href="#features">Features</a>
+      <a href="#start">Get Started</a>
       <a href="#demo">Demo</a>
       <a href="https://github.com/AmitSubhash/autolog">GitHub</a>
     </div>
@@ -454,12 +537,17 @@
 
     <h1>Your screen, understood.</h1>
     <p class="hero-tagline">
-      Ambient screen capture that builds a searchable activity knowledge graph.
-      All local, all yours.
+      A macOS menu bar app that captures your screen, runs OCR, and uses an LLM to build a searchable activity knowledge graph. Everything stays on your Mac.
     </p>
-    <div class="hero-install">
-      brew install AmitSubhash/tap/autolog
-      <span class="copy-hint">copy</span>
+    <div class="install-row">
+      <div class="install-brew" id="brew-cmd">
+        brew install --cask AmitSubhash/tap/autolog
+        <span class="copy-hint">copy</span>
+      </div>
+      <a class="install-dmg" href="https://github.com/AmitSubhash/autolog/releases/latest">
+        <svg viewBox="0 0 16 16"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75zM7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/></svg>
+        Download DMG
+      </a>
     </div>
   </div>
 
@@ -492,6 +580,9 @@
         <span class="step-label">Graph</span>
       </div>
     </div>
+    <p class="pipeline-desc">
+      Every few seconds, AutoLog screenshots your screen and extracts text via OCR. An LLM summarizes your activity into 5-minute chunks, infers what you're working on, and links related activities through shared files, URLs, and topics.
+    </p>
 
     <!-- Stats -->
     <div class="stats-grid">
@@ -546,9 +637,35 @@
       <div class="feature-card">
         <h3>
           <span class="feature-dot" style="background:var(--accent-amber)"></span>
-          5-Minute Feedback
+          Built-in API
         </h3>
-        <p>Summaries within 5 minutes of activity. Full-screen OCR captures everything visible -- not just the active window.</p>
+        <p>Local REST API at localhost:21890. Search summaries, browse activity, and integrate with Claude Code, MCP servers, or any tool.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Getting Started -->
+  <section id="start" class="fade-in">
+    <div class="section-label">Getting Started</div>
+    <div class="getting-started">
+      <h2>Up and running in 2 minutes</h2>
+      <div class="steps-list">
+        <div class="step-item">
+          <div class="step-num">1</div>
+          <div class="step-text"><strong>Install</strong><br>Homebrew cask or download the DMG from GitHub Releases.</div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">2</div>
+          <div class="step-text"><strong>Grant permissions</strong><br>Screen Recording and Accessibility. The onboarding wizard walks you through it.</div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">3</div>
+          <div class="step-text"><strong>Connect an LLM</strong><br>Point at a local <code style="color:var(--accent-amber)">claude -p</code> proxy or paste an OpenRouter API key.</div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">4</div>
+          <div class="step-text"><strong>Done</strong><br>Look for the eye icon in your menu bar. AutoLog is now capturing and summarizing.</div>
+        </div>
       </div>
     </div>
   </section>
@@ -572,10 +689,16 @@
 <!-- Footer -->
 <footer>
   <div class="container">
-    <a class="cta" href="https://github.com/AmitSubhash/autolog">
-      <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-      View on GitHub
-    </a>
+    <div class="footer-links">
+      <a href="https://github.com/AmitSubhash/autolog">
+        <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+      <a href="https://github.com/AmitSubhash/autolog/releases/latest">
+        <svg viewBox="0 0 16 16"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75zM7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/></svg>
+        Releases
+      </a>
+    </div>
     <p class="sub">Built with Swift, GRDB, Vision, and Claude Haiku</p>
     <p class="author">Made by Amit Subhash Thachanparambath</p>
   </div>
@@ -590,25 +713,25 @@ document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
 
 // Terminal simulation
 const lines = [
-  { type: 'input', text: '$ python3 process/test_full_pipeline.py' },
+  { type: 'input', text: '$ curl -s localhost:21890/health | jq .' },
   { type: 'blank' },
-  { type: 'output', text: '[3] CAPTURES: 10 recent' },
-  { type: 'output', text: '  #829 18:21:35 Brave Browser (keyframe, 1987 chars)' },
+  { type: 'output', text: '{' },
+  { type: 'output', text: '  "status": "ok",' },
+  { type: 'num', text: '  "capture_count": 1023,' },
+  { type: 'num', text: '  "summary_count": 135' },
+  { type: 'output', text: '}' },
   { type: 'blank' },
-  { type: 'output', text: '[4] METADATA' },
-  { type: 'file', text: '  Terminal: amit -- Claude Code -- caffeinate' },
-  { type: 'file', text: '  Safari: CV -- https://arxiv.org/pdf/2603.16758' },
-  { type: 'file', text: '  Brave: Restoring brain-to-text communication...' },
+  { type: 'input', text: '$ # Latest Haiku summary:' },
   { type: 'blank' },
-  { type: 'output', text: '[7] HAIKU OUTPUT:' },
-  { type: 'highlight', text: '  Summary: "Reviewed neuroscience paper on intracortical' },
-  { type: 'highlight', text: '  brain-computer interfaces for restoring communication' },
-  { type: 'highlight', text: '  in patients with dysarthria from pontine stroke."' },
+  { type: 'highlight', text: '  "Reviewed neuroscience paper on intracortical' },
+  { type: 'highlight', text: '   brain-computer interfaces for restoring' },
+  { type: 'highlight', text: '   communication in patients with dysarthria."' },
   { type: 'blank' },
-  { type: 'output', text: '  Topics: [BCI, Dysarthria, Neural Interfaces, medRxiv]' },
-  { type: 'output', text: '  Type: research' },
-  { type: 'file', text: '  URLs: [medrxiv.org/content/10.64898/2026.02.19...]' },
-  { type: 'num', text: '  Cost: $0.0018' },
+  { type: 'output', text: '  Topics: [BCI, Dysarthria, Neural Interfaces]' },
+  { type: 'output', text: '  Type:   research' },
+  { type: 'file', text: '  Apps:   Safari, Terminal, Brave' },
+  { type: 'file', text: '  URLs:   medrxiv.org/content/10.64898/...' },
+  { type: 'num', text: '  Cost:   $0.0018' },
 ];
 
 const terminal = document.getElementById('terminal');
@@ -662,8 +785,8 @@ const statObserver = new IntersectionObserver((entries) => {
 statObserver.observe(statEl);
 
 // Copy install command
-document.querySelector('.hero-install').addEventListener('click', function() {
-  navigator.clipboard.writeText('brew install AmitSubhash/tap/autolog');
+document.getElementById('brew-cmd').addEventListener('click', function() {
+  navigator.clipboard.writeText('brew install --cask AmitSubhash/tap/autolog');
   const hint = this.querySelector('.copy-hint');
   hint.textContent = 'copied!';
   setTimeout(() => { hint.textContent = 'copy'; }, 1500);
