@@ -23,10 +23,10 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", stream=sys.stderr,
 )
 
-HOST = "127.0.0.1"
+HOST = "0.0.0.0"
 DEFAULT_PORT = 11434
-SUBPROCESS_TIMEOUT = 120
-MAX_CONCURRENT = 3
+SUBPROCESS_TIMEOUT = 300
+MAX_CONCURRENT = 5
 
 MODEL_MAP: dict[str, str] = {
     "anthropic/claude-haiku-4-5": "haiku",
@@ -46,12 +46,15 @@ async def run_claude_subprocess(
     user_text: str,
     model_alias: str,
     system_prompt: str | None = None,
+    max_turns: int | None = 1,
 ) -> dict[str, Any]:
     """Run ``claude -p`` as an async subprocess, return parsed JSON or error dict."""
     claude_path = shutil.which("claude")
     if not claude_path:
         return {"is_error": True, "result": "claude CLI not found on PATH"}
-    cmd = [claude_path, "-p", "--model", model_alias, "--output-format", "json", "--max-turns", "1"]
+    cmd = [claude_path, "-p", "--model", model_alias, "--output-format", "json"]
+    if max_turns:
+        cmd.extend(["--max-turns", str(max_turns)])
     if system_prompt:
         cmd.extend(["--system-prompt", system_prompt])
     logger.info("Running claude -p --model %s", model_alias)
@@ -209,8 +212,11 @@ class ProxyHandler(BaseHTTPRequestHandler):
             return
 
         # Submit via priority dispatcher
+        max_turns = body.get("max_turns", 1)
         assert _loop is not None and _dispatcher is not None
-        async_future = _dispatcher.submit(user_text, model_alias, system_prompt, _loop)
+        async_future = _dispatcher.submit(
+            user_text, model_alias, system_prompt, _loop, max_turns=max_turns,
+        )
         try:
             result = _wait_for_async(async_future)
         except TimeoutError:

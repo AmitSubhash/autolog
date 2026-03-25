@@ -43,6 +43,7 @@ class QueuedRequest:
     model_alias: str
     system_prompt: str | None
     future: asyncio.Future[dict[str, Any]]
+    max_turns: int | None = 1
     priority: str = field(init=False)
 
     def __post_init__(self) -> None:
@@ -106,7 +107,8 @@ class PriorityDispatcher:
                 logger.debug("Worker %d processing %s request", worker_id, req.priority)
                 try:
                     result = await run_claude_subprocess(
-                        req.user_text, req.model_alias, req.system_prompt
+                        req.user_text, req.model_alias, req.system_prompt,
+                        max_turns=req.max_turns,
                     )
                     if not req.future.done():
                         req.future.set_result(result)
@@ -155,6 +157,7 @@ class PriorityDispatcher:
         model_alias: str,
         system_prompt: str | None,
         loop: asyncio.AbstractEventLoop,
+        max_turns: int | None = 1,
     ) -> asyncio.Future[dict[str, Any]]:
         """Submit a request to the appropriate priority queue (thread-safe).
 
@@ -168,6 +171,8 @@ class PriorityDispatcher:
             Optional system prompt.
         loop : asyncio.AbstractEventLoop
             Event loop for creating the future.
+        max_turns : int or None
+            Max turns for claude -p. None for unlimited.
 
         Returns
         -------
@@ -180,6 +185,7 @@ class PriorityDispatcher:
             model_alias=model_alias,
             system_prompt=system_prompt,
             future=future,
+            max_turns=max_turns,
         )
 
         def _enqueue() -> None:
