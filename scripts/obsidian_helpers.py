@@ -2,12 +2,359 @@
 
 Pure functions for slugifying names, formatting durations, and building
 Markdown content for Activity, App, Topic, and Daily notes.
+
+Includes topic normalization to merge near-duplicate topic names and
+noise filtering to skip terminal metadata entities.
 """
 from __future__ import annotations
 
 import re
 import urllib.parse
 from datetime import datetime
+
+# ── Topic normalization ────────────────────────────────────────────────
+# Maps variant (lowercase) -> canonical Title Case name.
+_TOPIC_CANON: dict[str, str] = {
+    # BCI
+    "brain-computer interfaces": "Brain-Computer Interface",
+    "bci": "Brain-Computer Interface",
+    "neural interfaces": "Brain-Computer Interface",
+    "braingate2": "Brain-Computer Interface",
+    # File organization
+    "file-organization": "File Organization",
+    "file browsing": "File Organization",
+    "file management": "File Organization",
+    "file_navigation": "File Organization",
+    # PDF
+    "pdf-files": "Pdf Files",
+    "pdfs": "Pdf Files",
+    "final_pdfs": "Pdf Files",
+    # Development
+    "developer tools": "Development Tools",
+    "development": "Development Tools",
+    "development environment": "Development Tools",
+    "macos development": "Development Tools",
+    "development planning": "Development Tools",
+    "development setup": "Development Tools",
+    "development tools setup": "Development Tools",
+    "development workflow": "Development Tools",
+    # Email
+    "email management": "Email",
+    # CV
+    "cv review": "Cv",
+    "career files": "Cv",
+    # Python
+    "python development": "Python",
+    "python automation": "Python",
+    "python code review": "Python",
+    "python debugging": "Python",
+    "python execution": "Python",
+    "python implementation": "Python",
+    "python setup": "Python",
+    "python utilities": "Python",
+    "python-tooling": "Python",
+    "type hints": "Python",
+    # Bun
+    "bun runtime": "Bun",
+    # Professional
+    "professional networking": "Professional",
+    "professional profile": "Professional",
+    "profile viewing": "Professional",
+    "personal branding": "Professional",
+    # Terminal
+    "terminal_work": "Terminal",
+    "terminal commands": "Terminal",
+    "terminal_commands": "Terminal",
+    "terminal_workflow": "Terminal",
+    "terminal-work": "Terminal",
+    "terminal work": "Terminal",
+    "terminal setup": "Terminal",
+    "terminal testing": "Terminal",
+    "terminal development": "Terminal",
+    "command execution": "Terminal",
+    "command-execution": "Terminal",
+    "command-line": "Terminal",
+    "command-line execution": "Terminal",
+    "shell commands": "Terminal",
+    "script execution": "Terminal",
+    "script_execution": "Terminal",
+    # Code
+    "code editor": "Code",
+    "code quality": "Code",
+    "code refactoring": "Code",
+    "code editing": "Code",
+    "code_editing": "Code",
+    "code-search": "Code",
+    "coding": "Code",
+    "editing": "Code",
+    "file editing": "Code",
+    "refactoring": "Code",
+    # Database
+    "database debugging": "Database",
+    "database enrichment": "Database",
+    # Contextd
+    "contextd debugging": "Contextd",
+    "autolog": "Contextd",
+    "contextd vault": "Contextd",
+    "contextd-vault": "Contextd",
+    "mirrorlog": "Contextd",
+    "activity capture": "Contextd",
+    "activity logging": "Contextd",
+    "screenshot capture": "Contextd",
+    "context capture": "Contextd",
+    "menu bar app": "Contextd",
+    # Projects
+    "personal projects": "Projects",
+    "project files": "Projects",
+    # Portfolio
+    "github portfolio": "Portfolio",
+    "portfolio development": "Portfolio",
+    # Search
+    "web_lookup": "Search",
+    "web browsing": "Search",
+    "web-search": "Search",
+    # HPC
+    "hpc agent project": "Hpc",
+    "hpc cluster": "Hpc",
+    "hpc debugging": "Hpc",
+    "hpc deployment": "Hpc",
+    "hpc_llm module": "Hpc",
+    "bigred200 hpc": "Bigred200",
+    # GPU
+    "gpu access": "Gpu",
+    "gpu clusters": "Gpu",
+    "gpu cost optimization": "Gpu",
+    "gpu hardware": "Gpu",
+    "gpu infrastructure": "Gpu",
+    "gpu memory optimization": "Gpu",
+    "gpu pricing": "Gpu",
+    "gpu testing": "Gpu",
+    "gpu verification": "Gpu",
+    "nvidia a100": "Gpu",
+    "nvidia-smi": "Gpu",
+    "nvlink topology": "Gpu",
+    "a100 gpu": "Gpu",
+    # Documentation
+    "vault documentation": "Documentation",
+    "documentation lookup": "Documentation",
+    "toolkit documentation": "Documentation",
+    # Scripting
+    "scripting": "Development Tools",
+    # System
+    "system utilities": "System",
+    "process monitoring": "System",
+    "system monitoring": "System",
+    "system overheating troubleshooting": "System",
+    "system thermal diagnostics": "System",
+    "system thermal management": "System",
+    # JS
+    "javascript-typescript": "Javascript Runtime",
+    # Manim
+    "manim-skill": "Manim",
+    "manim visualization": "Manim",
+    # Cross-domain
+    "cross-domain-analogy": "Cross-Domain Analogy",
+    "cross-domain analogy discovery": "Cross-Domain Analogy",
+    "analogy discovery pipeline": "Cross-Domain Analogy",
+    # Github
+    "github pr review": "Github",
+    "github profile audit": "Github",
+    "github repositories": "Github",
+    "github repository": "Github",
+    "github review": "Github",
+    "github sign-in": "Github",
+    "repository setup": "Github",
+    "repository updates": "Github",
+    "git commit": "Github",
+    "git initialization": "Github",
+    "git staging": "Github",
+    "pr review": "Github",
+    # Browser-use
+    "browser-use framework": "Browser-Use",
+    "browser-use setup": "Browser-Use",
+    "browser automation": "Browser-Use",
+    "browser testing": "Browser-Use",
+    "browser verification": "Browser-Use",
+    "browser-reference": "Browser-Use",
+    "browsing": "Browser-Use",
+    # Claude Code
+    "claude code integration": "Claude Code",
+    "claude code setup": "Claude Code",
+    "claude configuration": "Claude Code",
+    "claude-code": "Claude Code",
+    # CLI
+    "cli authentication": "Cli",
+    "cli design": "Cli",
+    "cli implementation": "Cli",
+    "cli interface": "Cli",
+    "cli testing": "Cli",
+    # Feedback memory
+    "feedback-memory": "Feedback Memory",
+    "memory setup": "Feedback Memory",
+    # Pigbet
+    "pigbet brain extraction": "Pigbet",
+    "pigbet pipeline": "Pigbet",
+    "pigbet-inference-pipeline": "Pigbet",
+    "pig brain mri": "Pigbet",
+    # Knowledge graph
+    "knowledge graphs": "Knowledge Graph",
+    "graph analysis": "Knowledge Graph",
+    "graph domain matching": "Knowledge Graph",
+    "graph motif detection": "Knowledge Graph",
+    "semantic matching": "Knowledge Graph",
+    # vLLM
+    "vllm configuration": "Vllm",
+    "vllm server": "Vllm",
+    "vllm serving": "Vllm",
+    # SLURM
+    "slurm job management": "Slurm",
+    "slurm job submission": "Slurm",
+    "slurm job timeout": "Slurm",
+    "job timeout debugging": "Slurm",
+    "job dependency failure": "Slurm",
+    # PyTorch
+    "pytorch inference": "Pytorch",
+    "distributed training": "Pytorch",
+    # Explainer video
+    "explainer videos": "Explainer Video",
+    "animated videos": "Explainer Video",
+    "educational video": "Explainer Video",
+    "educational content generation": "Explainer Video",
+    "video rendering": "Explainer Video",
+    "video pipeline": "Explainer Video",
+    "batch rendering": "Explainer Video",
+    # Package management
+    "package dependencies": "Package Management",
+    "package distribution": "Package Management",
+    "package releases": "Package Management",
+    "packages": "Package Management",
+    "version management": "Package Management",
+    # Testing
+    "application testing": "Testing",
+    "feature testing": "Testing",
+    "gui testing": "Testing",
+    "local testing": "Testing",
+    "unit testing": "Testing",
+    "result verification": "Testing",
+    "output verification": "Testing",
+    # Setup
+    "environment setup": "Setup",
+    "setup": "Setup",
+    "project setup": "Setup",
+    "project-setup": "Setup",
+    # Security
+    "security hardening": "Security",
+    "code signing": "Security",
+    "macos permissions": "Security",
+    # Job search
+    "job applications": "Job Search",
+    "job board extraction": "Job Search",
+    "job description scraping": "Job Search",
+    "job-craft": "Job Search",
+    "cover letters": "Job Search",
+    "resume generation": "Job Search",
+    "resume tailoring": "Job Search",
+    "resume tool": "Job Search",
+    "resume-tailoring": "Job Search",
+    # Image registration
+    "nifti affine transformations": "Image Registration",
+    "nifti processing": "Image Registration",
+    "brain image registration": "Image Registration",
+    "voxel alignment": "Image Registration",
+    "voxel-space registration": "Image Registration",
+    "image orientation": "Image Registration",
+    "orientation detection": "Image Registration",
+    "axis flipping": "Image Registration",
+    # India AI
+    "india ai": "India Ai",
+    "indiaai innovation challenge": "India Ai",
+    "indiaai mission": "India Ai",
+    "indian ai funding": "India Ai",
+    "indian ai startups": "India Ai",
+    "ai funding": "India Ai",
+    # Startup
+    "market opportunity": "Startup",
+    "market traction": "Startup",
+    "traction metrics": "Startup",
+    "monetization": "Startup",
+    "budget": "Startup",
+    "budget planning": "Startup",
+    "budget spreadsheet": "Startup",
+    "kpi metrics": "Startup",
+    "kpi sheets": "Startup",
+    # Dipy
+    "dipy algorithms": "Dipy",
+    "dipy cleanup": "Dipy",
+    "stanford hardi data": "Dipy",
+    # Neuroimaging
+    "brain imaging analysis": "Neuroimaging",
+    "neonatal brain imaging": "Neuroimaging",
+    "neuroimaging preprocessing": "Neuroimaging",
+    # Preprocessing
+    "image preprocessing": "Preprocessing",
+    "normalization": "Preprocessing",
+    # Dashboard
+    "dashboard configuration": "Dashboard",
+    "dashboard creation": "Dashboard",
+    "dashboard design": "Dashboard",
+    "dashboard development": "Dashboard",
+    "dashboard visualization": "Dashboard",
+    # Pipeline
+    "pipeline architecture": "Pipeline",
+    "pipeline debugging": "Pipeline",
+    "pipeline visualization": "Pipeline",
+    "data pipeline": "Pipeline",
+    "ml pipeline": "Pipeline",
+}
+
+# Terminal tab names and noise entities to filter out of wikilinks.
+_NOISE_ENTITIES: set[str] = {
+    "amit", "stanford_hardi", "stanford hardi", "about:blank",
+    "unknown", "untitled", "loginwindow",
+}
+
+_NOISE_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-"),  # UUIDs
+    re.compile(r"^\d{4}\.\d{2}\.\d{2}"),  # arxiv-style IDs
+]
+
+
+def normalize_topic(name: str) -> str:
+    """Normalize a topic name to its canonical form.
+
+    Parameters
+    ----------
+    name : str
+        Raw topic name from LLM output.
+
+    Returns
+    -------
+    str
+        Canonical topic name (Title Case).
+    """
+    lower = name.strip().lower()
+    if lower in _TOPIC_CANON:
+        return _TOPIC_CANON[lower]
+    return sanitize_name(name)
+
+
+def is_noise_entity(name: str) -> bool:
+    """Check if a name is a terminal/metadata noise entity.
+
+    Parameters
+    ----------
+    name : str
+        Candidate entity or file name from wikilinks.
+
+    Returns
+    -------
+    bool
+        True if the name should be excluded from wikilinks.
+    """
+    lower = name.strip().lower()
+    if lower in _NOISE_ENTITIES:
+        return True
+    return any(p.search(lower) for p in _NOISE_PATTERNS)
 
 
 def slugify(text: str, max_length: int = 60) -> str:
@@ -141,11 +488,16 @@ def build_activity_note(
     if start_dt and end_dt:
         time_range = f"{start_dt.strftime('%H:%M')} - {end_dt.strftime('%H:%M')}"
 
+    # Normalize and deduplicate topics
+    norm_topics = list(dict.fromkeys(
+        normalize_topic(t) for t in topics
+    ))
+
     lines: list[str] = [
         "---",
         f"duration_minutes: {duration}",
         f"apps: [{', '.join(app_names)}]",
-        f"topics: [{', '.join(sanitize_name(t) for t in topics)}]",
+        f"topics: [{', '.join(norm_topics)}]",
         f"confidence: {confidence}",
         "---", "",
         f"# {name}", "",
@@ -170,9 +522,13 @@ def build_activity_note(
         lines.append("")
 
     all_files = _collect_paths(activity, sessions)
-    if all_files:
+    # Filter out noise entities from file links
+    clean_files = [
+        p for p in all_files if not is_noise_entity(_extract_filename(p))
+    ]
+    if clean_files:
         lines.append("## Files")
-        lines.extend(f"- [[{_extract_filename(p)}]]" for p in all_files)
+        lines.extend(f"- [[{_extract_filename(p)}]]" for p in clean_files)
         lines.append("")
 
     all_urls = _collect_urls(activity, sessions)
@@ -186,9 +542,9 @@ def build_activity_note(
         lines.extend(f"- [[{r.get('name', 'Unknown')}]]" for r in related[:5])
         lines.append("")
 
-    if topics:
+    if norm_topics:
         lines.append("## Topics")
-        lines.extend(f"- [[{sanitize_name(t)}]]" for t in topics)
+        lines.extend(f"- [[{t}]]" for t in norm_topics)
         lines.append("")
 
     return "\n".join(lines)
@@ -227,7 +583,7 @@ def build_topic_note(
     topic_name: str, recent_activities: list[str],
 ) -> str:
     """Build Markdown content for a Topic note."""
-    clean = sanitize_name(topic_name)
+    clean = normalize_topic(topic_name)
     count = len(recent_activities)
     lines = ["---", "type: topic", "---", "", f"# {clean}", ""]
     lines.append(
@@ -242,12 +598,48 @@ def build_topic_note(
 
 
 def build_daily_note(
-    date: datetime, app_usage: list[dict], activities: list[dict],
+    date: datetime,
+    app_usage: list[dict],
+    activities: list[dict],
+    all_sessions: list[dict] | None = None,
 ) -> str:
-    """Build Markdown content for a Daily note."""
+    """Build Markdown content for a Daily note.
+
+    Parameters
+    ----------
+    date : datetime
+        The date for this daily note.
+    app_usage : list[dict]
+        Per-day app usage stats (already filtered to this date).
+    activities : list[dict]
+        Activities that occurred on this date.
+    all_sessions : list[dict], optional
+        Raw sessions for computing per-day app usage when app_usage
+        is not pre-filtered.
+    """
     date_str = date.strftime("%Y-%m-%d")
     title = date.strftime("%B %d, %Y")
     lines = ["---", f"date: {date_str}", "---", "", f"# {title}", ""]
+
+    # Compute per-day app usage from sessions if available
+    if all_sessions:
+        by_app: dict[str, dict] = {}
+        for session in all_sessions:
+            start = _parse_iso(session.get("start_timestamp", ""))
+            if not start or start.strftime("%Y-%m-%d") != date_str:
+                continue
+            app = session.get("app_name", "Unknown")
+            entry = by_app.setdefault(
+                app, {"total_seconds": 0.0, "session_count": 0},
+            )
+            end = _parse_iso(session.get("end_timestamp", ""))
+            if start and end:
+                entry["total_seconds"] += (end - start).total_seconds()
+            entry["session_count"] += 1
+        if by_app:
+            app_usage = [
+                {"app_name": k, **v} for k, v in by_app.items()
+            ]
 
     if app_usage:
         sorted_usage = sorted(
@@ -262,12 +654,16 @@ def build_daily_note(
         lines.append("")
 
     if activities:
-        lines.append("## Activities")
-        for act in activities:
-            act_name = act.get("name", "Unknown")
-            dur = _duration_minutes(
+        # Sort by duration descending
+        def _act_dur(act: dict) -> int:
+            return _duration_minutes(
                 act.get("start_timestamp", ""), act.get("end_timestamp", ""),
             )
+        sorted_acts = sorted(activities, key=_act_dur, reverse=True)
+        lines.append("## Activities")
+        for act in sorted_acts:
+            act_name = act.get("name", "Unknown")
+            dur = _act_dur(act)
             lines.append(f"- [[{act_name}]] ({dur} min)")
         lines.append("")
 

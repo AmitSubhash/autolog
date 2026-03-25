@@ -21,6 +21,8 @@ from obsidian_helpers import (
     build_app_note,
     build_daily_note,
     build_topic_note,
+    is_noise_entity,
+    normalize_topic,
     sanitize_name,
     slugify,
 )
@@ -146,9 +148,9 @@ def write_activity_notes(
         fpath.write_text(content, encoding="utf-8")
         written += 1
 
-        # Track topic -> activity names
+        # Track topic -> activity names (normalized)
         for topic in activity.get("key_topics", []):
-            clean = sanitize_name(topic)
+            clean = normalize_topic(topic)
             topic_map.setdefault(clean, []).append(name)
 
         # Track app -> activity names, files, and window titles
@@ -204,9 +206,21 @@ def write_topic_notes(topic_map: dict[str, list[str]]) -> int:
 
 
 def write_daily_notes(
-    activities: list[dict], app_usage: list[dict],
+    activities: list[dict],
+    app_usage: list[dict],
+    all_sessions: list[dict] | None = None,
 ) -> int:
-    """Write Daily notes grouped by date. Returns count written."""
+    """Write Daily notes grouped by date. Returns count written.
+
+    Parameters
+    ----------
+    activities : list[dict]
+        All activities in the sync window.
+    app_usage : list[dict]
+        Global app usage (used as fallback if sessions unavailable).
+    all_sessions : list[dict], optional
+        All raw sessions, used to compute per-day app usage.
+    """
     by_date: dict[str, list[dict]] = {}
     for act in activities:
         date_key = act.get("start_timestamp", "")[:10]
@@ -219,7 +233,9 @@ def write_daily_notes(
             date_obj = datetime.strptime(date_str, "%Y-%m-%d")
         except ValueError:
             continue
-        content = build_daily_note(date_obj, app_usage, day_acts)
+        content = build_daily_note(
+            date_obj, app_usage, day_acts, all_sessions=all_sessions,
+        )
         fpath = VAULT_PATH / "Daily" / f"{date_str}.md"
         fpath.write_text(content, encoding="utf-8")
         written += 1
@@ -263,7 +279,15 @@ def main() -> None:
     app_usage = fetch_app_usage(token, hours)
     app_count = write_app_notes(app_usage, app_data)
     topic_count = write_topic_notes(topic_map)
-    daily_count = write_daily_notes(activities, app_usage)
+
+    # Collect all sessions for per-day app usage in daily notes
+    all_sessions: list[dict] = []
+    for activity in activities:
+        activity_id = activity.get("id", 0)
+        sessions = fetch_activity_sessions(token, activity_id)
+        all_sessions.extend(sessions)
+
+    daily_count = write_daily_notes(activities, app_usage, all_sessions)
 
     logger.info(
         "Done: %d activities, %d apps, %d topics, %d daily notes",

@@ -5,9 +5,32 @@ import Foundation
 /// engine file under 300 lines.
 enum ActivityGraphBuilder {
 
+    // MARK: - Noise Entity Filtering
+
+    /// Terminal tab names, usernames, and directory names that should not
+    /// be stored as entities. Checked case-insensitively.
+    private static let noiseEntities: Set<String> = [
+        "amit", "atsubhas", "stanford_hardi", "stanford hardi",
+        "about:blank", "unknown", "untitled", "loginwindow",
+        "securityagent",
+    ]
+
+    /// Returns true if a value is noise (terminal tab name, username, etc.)
+    /// that should be filtered out before inserting into the entity graph.
+    static func isNoiseEntity(_ value: String) -> Bool {
+        let lower = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if lower.isEmpty || lower.count < 2 { return true }
+        if noiseEntities.contains(lower) { return true }
+        // Filter UUID-like strings
+        let uuidPattern = #"^[0-9a-f]{8}-[0-9a-f]{4}-"#
+        if lower.range(of: uuidPattern, options: .regularExpression) != nil { return true }
+        return false
+    }
+
     // MARK: - Entity Extraction (deterministic, no LLM)
 
     /// Extract entities from an activity's sessions and insert them into the database.
+    /// Filters out noise entities (terminal tab names, usernames) before insertion.
     static func extractEntities(
         for activityId: Int64,
         group: RawActivityGroup,
@@ -16,6 +39,8 @@ enum ActivityGraphBuilder {
         storageManager: StorageManager
     ) throws {
         for path in docPaths {
+            let filename = (path as NSString).lastPathComponent
+            guard !isNoiseEntity(filename) else { continue }
             try storageManager.insertActivityEntity(
                 ActivityEntityRecord(
                     id: nil, activityId: activityId,
@@ -24,6 +49,7 @@ enum ActivityGraphBuilder {
             )
         }
         for url in urls {
+            guard !isNoiseEntity(url) else { continue }
             try storageManager.insertActivityEntity(
                 ActivityEntityRecord(
                     id: nil, activityId: activityId,
@@ -32,6 +58,7 @@ enum ActivityGraphBuilder {
             )
         }
         for topic in group.keyTopics {
+            guard !isNoiseEntity(topic) else { continue }
             try storageManager.insertActivityEntity(
                 ActivityEntityRecord(
                     id: nil, activityId: activityId,
@@ -136,16 +163,24 @@ enum ActivityGraphBuilder {
         }.joined(separator: "\n\n")
     }
 
+    /// Get summary text overlapping with a session's time range (public accessor).
+    static func overlappingSummaryTextPublic(
+        for session: AppSessionRecord,
+        storageManager: StorageManager
+    ) -> String? {
+        return overlappingSummaryText(for: session, storageManager: storageManager)
+    }
+
     /// Get summary text overlapping with a session's time range.
     private static func overlappingSummaryText(
         for session: AppSessionRecord,
         storageManager: StorageManager
     ) -> String? {
         let summaries = try? storageManager.summaries(
-            from: session.startDate, to: session.endDate, limit: 2
+            from: session.startDate, to: session.endDate, limit: 3
         )
         guard let summaries = summaries, !summaries.isEmpty else { return nil }
         let text = summaries.map(\.summary).joined(separator: " ")
-        return text.count > 200 ? String(text.prefix(200)) + "..." : text
+        return text.count > 500 ? String(text.prefix(500)) + "..." : text
     }
 }

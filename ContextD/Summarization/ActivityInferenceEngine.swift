@@ -158,11 +158,13 @@ actor ActivityInferenceEngine {
         }
 
         let parsed = ActivityGraphBuilder.parseInferenceResponse(response.text, logger: logger)
-        let validated = validateInferenceResponse(parsed: parsed, validSessionIds: validIds)
 
         let sessionMap = Dictionary(uniqueKeysWithValues: sessions.compactMap { s in
             s.id.map { ($0, s) }
         })
+        let validated = validateInferenceResponse(
+            parsed: parsed, validSessionIds: validIds, sessionMap: sessionMap
+        )
 
         // Create activities FIRST, then mark sessions as inferred.
         // If creation fails mid-loop, unmarked sessions will be retried next cycle.
@@ -176,11 +178,17 @@ actor ActivityInferenceEngine {
     }
 
     /// Create individual activities for sessions that don't need LLM grouping.
+    /// Derives a descriptive name from the session's overlapping summary text
+    /// instead of using a generic "Session: AppName" label.
     private func createIndividualActivities(for sessions: [AppSessionRecord]) async {
         for session in sessions {
             guard let sessionId = session.id else { continue }
+
+            // Try to derive a name from the overlapping summary
+            let name = Self.deriveActivityName(for: session, storageManager: storageManager)
+
             let group = RawActivityGroup(
-                name: "Session: \(session.appName)",
+                name: name,
                 description: nil,
                 sessionIds: [sessionId],
                 keyTopics: [],
@@ -193,6 +201,41 @@ actor ActivityInferenceEngine {
                 logger.error("Failed to create individual activity: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// Derive a descriptive activity name from a session's summary text and metadata.
+    private static func deriveActivityName(
+        for session: AppSessionRecord,
+        storageManager: StorageManager
+    ) -> String {
+        // Check overlapping summaries for a meaningful description
+        if let summaryText = ActivityGraphBuilder.overlappingSummaryTextPublic(
+            for: session, storageManager: storageManager
+        ), !summaryText.isEmpty {
+            // Use first sentence of the summary, capped at 80 chars
+            let sentenceBreaks = CharacterSet(charactersIn: ".!?")
+            let firstSentence = summaryText
+                .components(separatedBy: sentenceBreaks)
+                .first?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
+            if firstSentence.count >= 10 {
+                let capped = firstSentence.count > 80
+                    ? String(firstSentence.prefix(77)) + "..."
+                    : firstSentence
+                return capped
+            }
+        }
+
+        // Fallback: use window title if meaningful
+        let titles = session.decodedWindowTitles
+        if let title = titles.first, !title.isEmpty, title.count > 3 {
+            let capped = title.count > 60 ? String(title.prefix(57)) + "..." : title
+            return "\(session.appName): \(capped)"
+        }
+
+        // Last resort: app name with time
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return "\(session.appName) at \(formatter.string(from: session.startDate))"
     }
 
     // MARK: - Activity Creation
@@ -250,7 +293,8 @@ actor ActivityInferenceEngine {
 
     func validateInferenceResponse(
         parsed: [RawActivityGroup],
-        validSessionIds: Set<Int64>
+        validSessionIds: Set<Int64>,
+        sessionMap: [Int64: AppSessionRecord] = [:]
     ) -> [RawActivityGroup] {
         var claimed = Set<Int64>()
         var validated: [RawActivityGroup] = []
@@ -267,11 +311,20 @@ actor ActivityInferenceEngine {
             ))
         }
 
-        // Orphan rescue: unclaimed sessions become individual activities
+        // Orphan rescue: unclaimed sessions become individual activities.
+        // Name them descriptively instead of "Untitled session".
         let orphans = validSessionIds.subtracting(claimed)
         for orphanId in orphans {
+            let name: String
+            if let session = sessionMap[orphanId] {
+                name = Self.deriveActivityName(
+                    for: session, storageManager: storageManager
+                )
+            } else {
+                name = "Uncategorized activity"
+            }
             validated.append(RawActivityGroup(
-                name: "Untitled session",
+                name: name,
                 description: nil,
                 sessionIds: [orphanId],
                 keyTopics: [],

@@ -17,21 +17,41 @@ enum PromptTemplates {
         is organized as keyframes (full screen snapshots) and deltas (only text \
         that changed between snapshots).
 
-        For key_topics, extract ONLY:
-        - Project names (e.g., "contextd", "fp8-training", "brain-imaging-review")
+        For key_topics, REUSE canonical names from this vocabulary when they match:
+
+        Projects: Pigbet, Contextd, 3Brown1Blue, RAS-Optimize, AutoResearchClaw, \
+        Reallms, Deep Variance, GlazerAI, Thehuzz
+        Research: Brain-Computer Interface, Neuroimaging, Image Registration, \
+        Brain Extraction, Preprocessing, Monte Carlo Photon Transport, Diffuse Optical \
+        Tomography, Piglet Neuroimaging
+        Tech: Python, Pytorch, Manim, SwiftUI, Vllm, Slurm, Dipy, Emacs, Obsidian, \
+        Tableau, Docker, React, Next.js
+        Infra: Hpc, Bigred200, Gpu, Cuda
+        Career: Job Search, Cv, Portfolio, Professional, Alumni Employment, Hackathon
+        Meta: Claude Code, Agent Harness, Browser-Use, Knowledge Graph, \
+        Cross-Domain Analogy, Pipeline, Dashboard
+        Business: Startup, India Ai, Presentation
+
+        If the activity matches one of the above, use that exact name. Only invent a \
+        new topic name if nothing above fits. New names should be Title Case, 1-3 words, \
+        and specific (a noun, not a verb or action).
+
+        Extract ONLY:
+        - Project names visible on screen
         - Tool/app names ONLY if they are the focus, not just visible \
         (e.g., "Obsidian" if configuring it, NOT "Terminal" just because it was open)
-        - Concepts being researched (e.g., "Monte Carlo photon transport", NOT "research")
+        - Concepts being researched (e.g., "Monte Carlo Photon Transport", NOT "research")
         - People or organizations mentioned
-        - Specific technologies being used (e.g., "PyTorch", "SwiftUI", NOT "code editing")
+        - Specific technologies being used (e.g., "Pytorch", NOT "code editing")
 
         NEVER include:
         - Generic descriptions ("Activity Monitoring", "Screen Capture", "Text Editing")
-        - Variations of the same concept ("Database Stats" AND "Database Metrics")
-        - The tool "contextd" itself unless the user is actively developing it
+        - Variations of a canonical topic (use the canonical name above instead)
         - Obvious container apps (Terminal, Chrome, Finder, Safari) unless they are \
         the subject of the work
         - Action words as topics ("Debugging", "Browsing", "Coding", "Reading")
+        - Terminal tab names, usernames, or directory names as topics
+        - The tool "contextd" itself unless the user is actively developing it
 
         For activity_type, classify as exactly ONE of:
         - "coding" (writing, debugging, building, testing code)
@@ -140,6 +160,60 @@ enum PromptTemplates {
         Produce structured context references for the user's prompt.
         """
 
+    // MARK: - Enrichment Single-Pass (merged relevance + synthesis)
+
+    static let enrichmentSinglePassSystem = """
+        You are a context enrichment assistant. The user is about to send a prompt to an AI \
+        assistant and wants relevant context from their recent computer activity appended to it.
+
+        You receive two types of context:
+        1. SUMMARIES: High-level descriptions of activity windows (each covers several minutes). \
+           These provide temporal and topical context.
+        2. CAPTURES: Detailed OCR text from recent screen snapshots. These provide exact text, \
+           code, and content the user was looking at.
+
+        Your task:
+        1. Identify which summaries and captures are relevant to the user's prompt.
+        2. Produce structured context references from the RELEVANT items only.
+        3. Ignore items that are not related to the user's prompt.
+
+        Rules:
+        - Only include genuinely relevant information
+        - Be concise but specific -- include exact names, values, code snippets, etc.
+        - Order by relevance (most relevant first)
+        - Maximum 10 references
+        - Exclude passwords, tokens, and other credentials
+        - Prefer captures (exact text) over summaries (paraphrased) when both cover the same content
+
+        Format each reference as a structured line:
+        - [HH:MM, AppName - WindowTitle] Description of what was on screen...
+
+        Respond ONLY with the reference lines under a heading, nothing else. Example:
+
+        ## Recent Screen Context
+        - [14:30, Xcode - main.swift] User was editing the processData function, adding a nil check on line 42
+        - [14:25, Chrome - Stack Overflow] User was reading about async/await error handling patterns in Swift
+        - [14:20, Terminal - zsh] Build failed with "cannot find type DataProcessor in scope" on line 87
+
+        If nothing is relevant, respond with:
+
+        ## Recent Screen Context
+        _(No relevant context found.)_
+        """
+
+    static let enrichmentSinglePassUser = """
+        ## User's Prompt
+        {query}
+
+        ## Activity Summaries (high-level)
+        {summaries}
+
+        ## Detailed Screen Captures (recent OCR text)
+        {captures}
+
+        Identify relevant context and produce structured reference lines for the user's prompt.
+        """
+
     // MARK: - Citation Pass 2 (API / structured JSON output)
 
     static let citationPass2System = """
@@ -191,10 +265,29 @@ enum PromptTemplates {
 
         Rules:
         - Each session must belong to exactly one activity
-        - Activity names should be specific and actionable (e.g., "Debugging contextd \
-        sleep-wake handling", NOT "Coding")
-        - Sessions with no clear grouping should be individual activities
+        - Activity names MUST describe the specific task, not the app or action category
+        - Even single sessions MUST get a descriptive name based on their summary text
         - Confidence: 0.9+ for clear groups, 0.5-0.8 for uncertain groupings
+
+        GOOD activity names (specific, describe the task):
+        - "Debugging PigBET NIfTI orientation mismatch"
+        - "Reviewing alumni employment Tableau dashboard"
+        - "Configuring vLLM serving on BigRed200"
+        - "Writing BCI explainer video storyboard"
+        - "Submitting SLURM job for fp8 training run"
+
+        BAD activity names (generic, describe the app or action):
+        - "Terminal command execution"
+        - "Python code development and testing"
+        - "Safari web browsing session"
+        - "Quick Python script execution"
+        - "File management and organization"
+        - "Coding session"
+
+        For key_topics, reuse canonical names when possible:
+        Pigbet, Contextd, 3Brown1Blue, Neuroimaging, Image Registration, \
+        Python, Pytorch, Manim, Vllm, Slurm, Hpc, Bigred200, Gpu, \
+        Job Search, Cv, Claude Code, Knowledge Graph, Startup, Dashboard
 
         Respond ONLY in JSON (no markdown, no explanation):
         {"activities": [
@@ -285,6 +378,8 @@ extension PromptTemplates {
         case enrichmentPass2User = "prompt_enrichment_pass2_user"
         case citationPass2System = "prompt_citation_pass2_system"
         case citationPass2User = "prompt_citation_pass2_user"
+        case enrichmentSinglePassSystem = "prompt_enrichment_single_pass_system"
+        case enrichmentSinglePassUser = "prompt_enrichment_single_pass_user"
         case activityInferenceSystem = "prompt_activity_inference_system"
         case activityInferenceUser = "prompt_activity_inference_user"
     }
@@ -303,6 +398,8 @@ extension PromptTemplates {
         case .enrichmentPass2User: return enrichmentPass2User
         case .citationPass2System: return citationPass2System
         case .citationPass2User: return citationPass2User
+        case .enrichmentSinglePassSystem: return enrichmentSinglePassSystem
+        case .enrichmentSinglePassUser: return enrichmentSinglePassUser
         case .activityInferenceSystem: return activityInferenceSystem
         case .activityInferenceUser: return activityInferenceUser
         }
