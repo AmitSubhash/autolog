@@ -331,6 +331,19 @@ extension StorageManager {
         }
     }
 
+    /// Summarization health: last summary timestamp and pending capture count.
+    func summarizationHealth() throws -> (lastSummaryDate: Date?, pendingCount: Int) {
+        try database.dbPool.read { db in
+            let lastTs = try Double.fetchOne(db, sql:
+                "SELECT MAX(endTimestamp) FROM summaries")
+            let pending = try CaptureRecord
+                .filter(CaptureRecord.Columns.isSummarized == false)
+                .fetchCount(db)
+            let lastDate = lastTs.map { Date(timeIntervalSince1970: $0) }
+            return (lastDate, pending)
+        }
+    }
+
     /// Aggregated token usage across all callers in the last 24 hours.
     func totalTokenUsage24h() throws -> TokenUsageTotals {
         let cutoff = Date().timeIntervalSince1970 - 86400

@@ -18,6 +18,8 @@ struct MenuBarView: View {
     @State private var estimatedCostToday: Double = 0
     @State private var recentCaptures: [CaptureRecord] = []
     @State private var lastError: String?
+    @State private var lastSummaryDate: Date?
+    @State private var pendingCaptures: Int = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,6 +41,14 @@ struct MenuBarView: View {
             )
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
+
+            // Summarization health indicator
+            SummarizationStatusView(
+                lastSummaryDate: lastSummaryDate,
+                pendingCount: pendingCaptures
+            )
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
 
             IntervalIndicatorView(captureEngine: captureEngine)
             .padding(.horizontal, 16)
@@ -101,6 +111,12 @@ struct MenuBarView: View {
         captureCount24h = (try? storage.captureCount24h()) ?? 0
         summaryCount24h = (try? storage.summaryCount24h()) ?? 0
         recentCaptures = (try? storage.recentCaptures(limit: 3)) ?? []
+
+        // Summarization health
+        if let health = try? storage.summarizationHealth() {
+            lastSummaryDate = health.lastSummaryDate
+            pendingCaptures = health.pendingCount
+        }
 
         // Estimate cost from token usage (Haiku pricing approximation)
         if let usage = try? storage.totalTokenUsage24h() {

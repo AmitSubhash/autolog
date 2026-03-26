@@ -2,16 +2,24 @@ import SwiftUI
 
 // MARK: - Status Header
 
-/// App name + state indicator with colored dot.
+/// App name + state indicator with colored dot and pulse animation.
 struct StatusHeaderView: View {
     let state: CaptureState
     let isRunning: Bool
 
+    @State private var isPulsing = false
+
     var body: some View {
         HStack {
-            Text("autolog")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.primary)
+            HStack(spacing: 6) {
+                Image(systemName: "eye.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+
+                Text("autolog")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
+            }
 
             Spacer()
 
@@ -19,10 +27,17 @@ struct StatusHeaderView: View {
                 Circle()
                     .fill(dotColor)
                     .frame(width: 8, height: 8)
+                    .shadow(color: dotColor.opacity(isRunning && state == .recording ? 0.6 : 0), radius: 3)
+                    .scaleEffect(isPulsing && isRunning && state == .recording ? 1.2 : 1.0)
 
                 Text(statusLabel)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
+            }
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                isPulsing = true
             }
         }
     }
@@ -194,6 +209,64 @@ struct IntervalIndicatorView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Summarization Status
+
+/// Compact summarization health indicator showing last summary time and pending count.
+struct SummarizationStatusView: View {
+    let lastSummaryDate: Date?
+    let pendingCount: Int
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: statusIcon)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(statusColor)
+
+            if let date = lastSummaryDate {
+                Text("Last summary \(date.relativeString)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("No summaries yet")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+
+            Spacer()
+
+            if pendingCount > 0 {
+                Text("\(pendingCount) pending")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(isStalled ? .orange : .secondary)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(isStalled ? AnyShapeStyle(Color.orange.opacity(0.08)) : AnyShapeStyle(.quaternary.opacity(0.5)))
+        )
+    }
+
+    /// Summarization is stalled if last summary was more than 10 minutes ago and there are pending captures.
+    private var isStalled: Bool {
+        guard let date = lastSummaryDate else { return pendingCount > 0 }
+        return pendingCount > 0 && Date().timeIntervalSince(date) > 600
+    }
+
+    private var statusIcon: String {
+        if isStalled { return "exclamationmark.circle" }
+        if pendingCount == 0 { return "checkmark.circle" }
+        return "arrow.trianglehead.2.clockwise"
+    }
+
+    private var statusColor: Color {
+        if isStalled { return .orange }
+        if pendingCount == 0 { return .green }
+        return .blue
     }
 }
 
