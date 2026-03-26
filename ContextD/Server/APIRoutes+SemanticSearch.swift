@@ -2,7 +2,7 @@ import Foundation
 import Hummingbird
 import NIOCore
 
-/// Semantic search route for the ContextD API.
+/// Semantic search route for the AutoLog API.
 /// Split into its own file to keep APIRoutes.swift under 300 lines.
 extension APIServer {
 

@@ -1,4 +1,4 @@
-"""Nightly activity digest from contextd.
+"""Nightly activity digest from autolog.
 
 Fetches the last 24 hours of screen activity summaries, generates a
 concise digest via Claude Haiku, and writes it into the Claude Code
@@ -18,7 +18,7 @@ import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 
-CONTEXTD_BASE_URL = "http://localhost:21890"
+AUTOLOG_BASE_URL = "http://localhost:21890"
 HTTP_TIMEOUT_SECONDS = 15
 MEMORY_DIR = Path.home() / ".claude" / "projects" / "-Users-amit" / "memory"
 MEMORY_INDEX = MEMORY_DIR / "MEMORY.md"
@@ -33,7 +33,7 @@ logging.basicConfig(
 
 
 def fetch_summaries(minutes: int = 1440, limit: int = 200) -> list[dict]:
-    """Fetch activity summaries from contextd.
+    """Fetch activity summaries from autolog.
 
     Parameters
     ----------
@@ -45,15 +45,15 @@ def fetch_summaries(minutes: int = 1440, limit: int = 200) -> list[dict]:
     Returns
     -------
     list[dict]
-        Summary objects from contextd.
+        Summary objects from autolog.
     """
-    url = f"{CONTEXTD_BASE_URL}/v1/summaries?minutes={minutes}&limit={limit}"
+    url = f"{AUTOLOG_BASE_URL}/v1/summaries?minutes={minutes}&limit={limit}"
     req = urllib.request.Request(url, method="GET")
     try:
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_SECONDS) as resp:
             data = json.loads(resp.read().decode())
     except (urllib.error.URLError, OSError) as exc:
-        logger.error("contextd unreachable: %s", exc)
+        logger.error("autolog unreachable: %s", exc)
         return []
     if isinstance(data, list):
         return data
@@ -66,7 +66,7 @@ def format_summaries_for_prompt(summaries: list[dict]) -> str:
     Parameters
     ----------
     summaries : list[dict]
-        Summary objects from contextd.
+        Summary objects from autolog.
 
     Returns
     -------

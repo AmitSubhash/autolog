@@ -65,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 // MARK: - Notification Names
 
 extension Notification.Name {
-    static let startServices = Notification.Name("com.contextd.startServices")
+    static let startServices = Notification.Name("com.autolog.startServices")
 }
 
 // MARK: - Debug Window Controller

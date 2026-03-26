@@ -12,7 +12,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-VAULT_PATH = Path.home() / "Documents" / "contextd-vault"
+VAULT_PATH = Path.home() / "Documents" / "autolog-vault"
 ACTIVITIES_DIR = VAULT_PATH / "Activities"
 MAPS_DIR = VAULT_PATH / "Maps"
 REFLECTIONS_DIR = VAULT_PATH / "Reflections"

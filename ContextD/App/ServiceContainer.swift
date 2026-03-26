@@ -27,7 +27,7 @@ final class ServiceContainer {
     private init() {
         llmClient = OpenRouterClient()
 
-        let logFile = "/tmp/contextd-debug.log"
+        let logFile = "/tmp/autolog-debug.log"
         func debugLog(_ msg: String) {
             let line = "[\(Date())] \(msg)\n"
             if let data = line.data(using: .utf8) {

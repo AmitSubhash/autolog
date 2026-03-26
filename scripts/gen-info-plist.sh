@@ -13,7 +13,7 @@ cat <<'EOF'
     <key>CFBundleExecutable</key>
     <string>ContextD</string>
     <key>CFBundleIdentifier</key>
-    <string>com.contextd.app</string>
+    <string>com.autolog.app</string>
     <key>CFBundleName</key>
     <string>AutoLog</string>
     <key>CFBundleDisplayName</key>
@@ -31,7 +31,7 @@ cat <<'EOF'
     <key>LSUIElement</key>
     <true/>
     <key>CFBundleIconFile</key>
-    <string>contextd</string>
+    <string>autolog</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>

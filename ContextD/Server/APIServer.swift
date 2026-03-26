@@ -2,7 +2,7 @@ import Foundation
 import Hummingbird
 import NIOCore
 
-/// Embedded HTTP server for the ContextD API.
+/// Embedded HTTP server for the AutoLog API.
 /// Runs on localhost, binding to a configurable port (default 21890).
 /// Provides search, summaries, activity browsing, health check, OpenAPI spec,
 /// and interactive docs. All routes except /health require bearer token auth.
@@ -56,7 +56,7 @@ final class APIServer: Sendable {
                     )
                 )
                 logger.info("API server starting on http://127.0.0.1:\(port)")
-                logger.info("  Auth token: ~/.config/contextd/auth_token")
+                logger.info("  Auth token: ~/.config/autolog/auth_token")
                 logger.info("  POST /v1/search          - Search summaries (FTS)")
                 logger.info("  POST /v1/semantic-search - Semantic similarity search")
                 logger.info("  GET  /v1/summaries       - List summaries by time")

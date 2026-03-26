@@ -1,6 +1,6 @@
-"""MCP server bridge for contextd's HTTP API.
+"""MCP server bridge for autolog's HTTP API.
 
-Exposes contextd screen context search, summaries, activity, and health
+Exposes autolog screen context search, summaries, activity, and health
 as MCP tools over stdio transport. Uses only stdlib HTTP to minimize deps.
 """
 
@@ -19,13 +19,13 @@ from mcp.server.fastmcp import FastMCP
 # Configuration
 # ---------------------------------------------------------------------------
 
-CONTEXTD_BASE_URL = "http://localhost:21890"
+AUTOLOG_BASE_URL = "http://localhost:21890"
 HTTP_TIMEOUT_SECONDS = 10
 
-logger = logging.getLogger("contextd_mcp")
+logger = logging.getLogger("autolog_mcp")
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 
-mcp = FastMCP("contextd", instructions="Screen context from contextd")
+mcp = FastMCP("autolog", instructions="Screen context from autolog")
 
 # ---------------------------------------------------------------------------
 # HTTP helpers
@@ -33,12 +33,12 @@ mcp = FastMCP("contextd", instructions="Screen context from contextd")
 
 
 def _get(path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Make a GET request to contextd.
+    """Make a GET request to autolog.
 
     Parameters
     ----------
     path : str
-        URL path relative to CONTEXTD_BASE_URL (e.g. "/v1/summaries").
+        URL path relative to AUTOLOG_BASE_URL (e.g. "/v1/summaries").
     params : dict, optional
         Query parameters to append.
 
@@ -47,7 +47,7 @@ def _get(path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
     dict
         Parsed JSON response body.
     """
-    url = f"{CONTEXTD_BASE_URL}{path}"
+    url = f"{AUTOLOG_BASE_URL}{path}"
     if params:
         filtered = {k: v for k, v in params.items() if v is not None}
         if filtered:
@@ -60,17 +60,17 @@ def _get(path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
             return json.loads(resp.read().decode())
     except urllib.error.URLError as exc:
         raise ConnectionError(
-            f"contextd unreachable at {CONTEXTD_BASE_URL}: {exc}"
+            f"autolog unreachable at {AUTOLOG_BASE_URL}: {exc}"
         ) from exc
 
 
 def _post(path: str, body: dict[str, Any]) -> dict[str, Any]:
-    """Make a POST request to contextd.
+    """Make a POST request to autolog.
 
     Parameters
     ----------
     path : str
-        URL path relative to CONTEXTD_BASE_URL.
+        URL path relative to AUTOLOG_BASE_URL.
     body : dict
         JSON request body.
 
@@ -79,7 +79,7 @@ def _post(path: str, body: dict[str, Any]) -> dict[str, Any]:
     dict
         Parsed JSON response body.
     """
-    url = f"{CONTEXTD_BASE_URL}{path}"
+    url = f"{AUTOLOG_BASE_URL}{path}"
     data = json.dumps(body).encode()
     logger.info("POST %s", url)
     req = urllib.request.Request(
@@ -90,7 +90,7 @@ def _post(path: str, body: dict[str, Any]) -> dict[str, Any]:
             return json.loads(resp.read().decode())
     except urllib.error.URLError as exc:
         raise ConnectionError(
-            f"contextd unreachable at {CONTEXTD_BASE_URL}: {exc}"
+            f"autolog unreachable at {AUTOLOG_BASE_URL}: {exc}"
         ) from exc
 
 
@@ -105,7 +105,7 @@ def search_screen_context(
     time_range_minutes: int = 1440,
     limit: int = 20,
 ) -> str:
-    """Search screen captures and OCR text from contextd.
+    """Search screen captures and OCR text from autolog.
 
     Parameters
     ----------
@@ -137,7 +137,7 @@ def search_screen_context(
 
 @mcp.tool()
 def get_summaries(minutes: int = 60, limit: int = 50) -> str:
-    """Get recent activity summaries from contextd.
+    """Get recent activity summaries from autolog.
 
     Parameters
     ----------
@@ -165,7 +165,7 @@ def get_activity(
     kind: str | None = None,
     limit: int = 100,
 ) -> str:
-    """Get raw activity data from contextd.
+    """Get raw activity data from autolog.
 
     Parameters
     ----------
@@ -240,7 +240,7 @@ def semantic_search(
 
 @mcp.tool()
 def get_screen_health() -> str:
-    """Check if contextd is running and healthy.
+    """Check if autolog is running and healthy.
 
     Returns
     -------

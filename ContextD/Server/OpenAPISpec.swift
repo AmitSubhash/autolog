@@ -1,6 +1,6 @@
 import Foundation
 
-/// Static OpenAPI 3.1 specification for the ContextD API.
+/// Static OpenAPI 3.1 specification for the AutoLog API.
 /// Served at GET /openapi.json.
 enum OpenAPISpec {
     static let json = """

@@ -10,7 +10,7 @@ struct RawActivityGroup: Sendable {
 }
 
 /// Background engine that infers logical activities from app sessions.
-/// Groups sessions into tasks (e.g., "Debugging contextd sleep-wake handling")
+/// Groups sessions into tasks (e.g., "Debugging autolog sleep-wake handling")
 /// using LLM inference, then extracts entities and discovers cross-activity links.
 actor ActivityInferenceEngine {
     private let storageManager: StorageManager

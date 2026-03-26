@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# reset-all.sh — Reset ContextD to a clean state for testing.
+# reset-all.sh — Reset AutoLog to a clean state for testing.
 # Kills the running app, resets permissions, and optionally deletes the database.
 #
 # Usage:
@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-BUNDLE_ID="com.contextd.app"
+BUNDLE_ID="com.autolog.app"
 PRODUCT="ContextD"
 DB_PATH="$HOME/Library/Application Support/ContextD/contextd.sqlite"
 
@@ -19,12 +19,12 @@ RED='\033[0;31m'
 CYAN='\033[0;36m'
 RESET='\033[0m'
 
-echo -e "${CYAN}ContextD Reset${RESET}"
+echo -e "${CYAN}AutoLog Reset${RESET}"
 echo "──────────────────────────────────"
 
 # Kill running instances
 if pgrep -f "${PRODUCT}" > /dev/null 2>&1; then
-    echo -e "${YELLOW}Killing running ContextD processes...${RESET}"
+    echo -e "${YELLOW}Killing running AutoLog processes...${RESET}"
     pkill -f "${PRODUCT}" 2>/dev/null || true
     sleep 1
     echo -e "${GREEN}  Done.${RESET}"

@@ -18,7 +18,7 @@ CYAN   := \033[0;36m
 RESET  := \033[0m
 
 .PHONY: help build release run clean resolve lint test benchmark db-shell db-stats db-recent db-search \
-        db-keyframes reset-permissions reset-db logs install uninstall check-permissions watch
+        db-keyframes reset-permissions reset-db logs install install-app uninstall check-permissions watch
 
 # ─────────────────────────────────────────
 #  Help
@@ -323,6 +323,25 @@ install: release ## Install release binary to /usr/local/bin
 	@echo "$(CYAN)Installing to /usr/local/bin/$(PRODUCT)...$(RESET)"
 	@cp $(RELEASE_BIN) /usr/local/bin/$(PRODUCT)
 	@echo "$(GREEN)Installed. Run with: $(PRODUCT)$(RESET)"
+
+INSTALLED_APP := /Applications/AutoLog.app
+
+install-app: release ## Build, sign, and install to /Applications/AutoLog.app (preserves permissions)
+	@echo "$(CYAN)Installing to $(INSTALLED_APP)...$(RESET)"
+	@killall $(PRODUCT) 2>/dev/null || true
+	@sleep 1
+	@cp $(RELEASE_BIN) "$(INSTALLED_APP)/Contents/MacOS/$(PRODUCT)"
+	@if security find-identity -v -p codesigning 2>/dev/null | grep -q "ContextD Dev"; then \
+		codesign --force --deep --sign "ContextD Dev" \
+			--entitlements Resources/ContextD.entitlements \
+			"$(INSTALLED_APP)" 2>/dev/null && \
+		echo "  $(GREEN)Signed with ContextD Dev$(RESET)"; \
+	else \
+		codesign --force --deep --sign - "$(INSTALLED_APP)" 2>/dev/null && \
+		echo "  $(YELLOW)Ad-hoc signed (no ContextD Dev cert found)$(RESET)"; \
+	fi
+	@echo "$(GREEN)Installed. Launching...$(RESET)"
+	@open "$(INSTALLED_APP)"
 
 uninstall: ## Remove installed binary
 	@rm -f /usr/local/bin/$(PRODUCT)

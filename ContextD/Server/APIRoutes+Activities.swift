@@ -2,7 +2,7 @@ import Foundation
 import Hummingbird
 import NIOCore
 
-/// Inferred activity and activity graph routes for the ContextD API.
+/// Inferred activity and activity graph routes for the AutoLog API.
 extension APIServer {
 
     func registerInferredActivitiesRoutes(

@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.contextd.nightly-digest</string>
+    <string>com.autolog.nightly-digest</string>
 
     <key>ProgramArguments</key>
     <array>
@@ -23,8 +23,8 @@
     </dict>
 
     <key>StandardOutPath</key>
-    <string>/Users/amit/Library/Logs/contextd-nightly-digest.log</string>
+    <string>/Users/amit/Library/Logs/autolog-nightly-digest.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/amit/Library/Logs/contextd-nightly-digest.err</string>
+    <string>/Users/amit/Library/Logs/autolog-nightly-digest.err</string>
 </dict>
 </plist>

@@ -23,7 +23,7 @@ RESET='\033[0m'
 check_db() {
     if [ ! -f "$DB_PATH" ]; then
         echo -e "${RED}Database not found at: ${DB_PATH}${RESET}"
-        echo "Run ContextD first to create the database."
+        echo "Run AutoLog first to create the database."
         exit 1
     fi
 }
@@ -189,7 +189,7 @@ SQL
 }
 
 cmd_interactive() {
-    echo -e "${CYAN}ContextD Database Inspector${RESET}"
+    echo -e "${CYAN}AutoLog Database Inspector${RESET}"
     echo ""
     echo "  1) Statistics"
     echo "  2) Recent captures"

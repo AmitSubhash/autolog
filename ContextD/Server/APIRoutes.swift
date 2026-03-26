@@ -2,7 +2,7 @@ import Foundation
 import Hummingbird
 import NIOCore
 
-/// Route registration for the ContextD API.
+/// Route registration for the AutoLog API.
 /// Split from APIServer to keep files under 300 lines.
 extension APIServer {
 

@@ -5,4 +5,4 @@ set -euo pipefail
 export PATH="/Users/amit/.local/bin:/opt/homebrew/bin:/opt/homebrew/opt/python@3.11/libexec/bin:/usr/local/bin:$PATH"
 
 cd "$(dirname "$0")"
-exec python3 claude_proxy.py --port 21891
+exec python3 claude_proxy.py --port 11434

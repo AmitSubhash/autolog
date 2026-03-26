@@ -1,4 +1,4 @@
-"""Consolidate the contextd Obsidian vault by merging duplicate topics.
+"""Consolidate the autolog Obsidian vault by merging duplicate topics.
 
 Runs every 6 hours via launchd. Sends topics + recent activities to
 Claude Sonnet for dedup analysis, merges duplicates, rewrites wikilinks,
@@ -14,7 +14,7 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-VAULT_PATH = Path.home() / "Documents" / "contextd-vault"
+VAULT_PATH = Path.home() / "Documents" / "autolog-vault"
 TOPICS_DIR = VAULT_PATH / "Topics"
 ACTIVITIES_DIR = VAULT_PATH / "Activities"
 MAPS_DIR = VAULT_PATH / "Maps"

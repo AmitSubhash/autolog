@@ -1,6 +1,6 @@
-# ContextD — Full Application Specification
+# AutoLog — Full Application Specification
 
-> This document fully specifies the ContextD application such that a developer
+> This document fully specifies the AutoLog application such that a developer
 > could reproduce it from scratch without access to the source code.
 
 _Generated with an LLM, edited by a human._
@@ -9,7 +9,7 @@ _Generated with an LLM, edited by a human._
 
 ## 1. Overview
 
-**ContextD** is a macOS menu bar application that continuously captures screenshots,
+**AutoLog** is a macOS menu bar application that continuously captures screenshots,
 extracts text via OCR, progressively summarizes the captured activity using an LLM,
 and provides a prompt enrichment system that injects relevant screen context into
 user prompts for AI assistants. It also exposes a local HTTP API for programmatic
@@ -45,7 +45,7 @@ on your computer, so they can provide more relevant responses.
 | Screen Capture  | CoreGraphics (CGDisplayCreateImage)                  |
 | Accessibility   | AXUIElement API + CGWindowListCopyWindowInfo          |
 | Build System    | Swift Package Manager                                |
-| Bundle ID       | `com.contextd.app`                                   |
+| Bundle ID       | `com.autolog.app`                                   |
 
 ---
 
@@ -667,7 +667,7 @@ Stored as a **plain text file** at
 - `OpenRouterClient.hasAPIKey()` — check existence + non-empty.
 
 Note: A `KeychainHelper` exists in the codebase using `SecItemAdd`/`SecItemCopyMatching`
-with service `com.contextd.app`, but it is not currently used for API key storage.
+with service `com.autolog.app`, but it is not currently used for API key storage.
 
 ### 9.4 Response Parsing
 
@@ -970,7 +970,7 @@ Auto-refreshes every 3 seconds (toggle-able).
 ### 13.5 Onboarding Window
 
 `NSWindow` (520x420, titled + closable). Shows:
-- Eye circle icon + "Welcome to ContextD" title
+- Eye circle icon + "Welcome to AutoLog" title
 - Explanation text
 - Two `PermissionRow`s (Screen Recording, Accessibility) with grant/settings buttons
   and green/red status indicators
@@ -987,7 +987,7 @@ Writes every log message to both:
 - Apple's Unified Logging (`os.log.Logger`) with `.public` privacy
 - stdout with format: `[HH:mm:ss.SSS] [LEVEL] [category] message`
 
-Subsystem: `com.contextd.app`. Levels: debug, info, notice, warning, error.
+Subsystem: `com.autolog.app`. Levels: debug, info, notice, warning, error.
 
 ### 14.2 String Extensions
 
@@ -1029,7 +1029,7 @@ via `make bundle`:
 
 | Key                                       | Value                                |
 |-------------------------------------------|--------------------------------------|
-| CFBundleIdentifier                        | com.contextd.app                     |
+| CFBundleIdentifier                        | com.autolog.app                     |
 | CFBundleExecutable                        | ContextD                             |
 | CFBundleShortVersionString                | 0.1.0                                |
 | LSMinimumSystemVersion                    | 14.0                                 |

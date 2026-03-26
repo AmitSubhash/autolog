@@ -1,4 +1,4 @@
-"""Formatting helpers for the contextd Obsidian sync.
+"""Formatting helpers for the autolog Obsidian sync.
 
 Pure functions for slugifying names, formatting durations, and building
 Markdown content for Activity, App, Topic, and Daily notes.
@@ -92,17 +92,17 @@ _TOPIC_CANON: dict[str, str] = {
     # Database
     "database debugging": "Database",
     "database enrichment": "Database",
-    # Contextd
-    "contextd debugging": "Contextd",
-    "autolog": "Contextd",
-    "contextd vault": "Contextd",
-    "contextd-vault": "Contextd",
-    "mirrorlog": "Contextd",
-    "activity capture": "Contextd",
-    "activity logging": "Contextd",
-    "screenshot capture": "Contextd",
-    "context capture": "Contextd",
-    "menu bar app": "Contextd",
+    # AutoLog
+    "contextd debugging": "AutoLog",
+    "autolog": "AutoLog",
+    "autolog vault": "AutoLog",
+    "autolog-vault": "AutoLog",
+    "mirrorlog": "AutoLog",
+    "activity capture": "AutoLog",
+    "activity logging": "AutoLog",
+    "screenshot capture": "AutoLog",
+    "context capture": "AutoLog",
+    "menu bar app": "AutoLog",
     # Projects
     "personal projects": "Projects",
     "project files": "Projects",

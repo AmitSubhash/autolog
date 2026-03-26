@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dev.sh — Build and run ContextD with live log streaming in a split view.
+# dev.sh — Build and run AutoLog with live log streaming in a split view.
 #
 # Usage:
 #   ./scripts/dev.sh          # build + run + stream logs
@@ -9,7 +9,7 @@
 set -euo pipefail
 
 PRODUCT="ContextD"
-SUBSYSTEM="com.contextd.app"
+SUBSYSTEM="com.autolog.app"
 BUILD_DIR=".build"
 
 GREEN='\033[0;32m'
@@ -55,7 +55,7 @@ echo ""
 
 # Check if the app is already running
 if pgrep -f "${BIN}" > /dev/null 2>&1; then
-    echo -e "${YELLOW}ContextD is already running. Killing previous instance...${RESET}"
+    echo -e "${YELLOW}AutoLog is already running. Killing previous instance...${RESET}"
     pkill -f "${BIN}" 2>/dev/null || true
     sleep 1
 fi

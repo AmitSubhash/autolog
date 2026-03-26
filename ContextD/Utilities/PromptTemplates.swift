@@ -6,7 +6,7 @@ import os.log
 enum PromptTemplates {
 
     private static let logger = Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "ContextD",
+        subsystem: Bundle.main.bundleIdentifier ?? "AutoLog",
         category: "PromptTemplates"
     )
 
@@ -19,7 +19,7 @@ enum PromptTemplates {
 
         For key_topics, REUSE canonical names from this vocabulary when they match:
 
-        Projects: Pigbet, Contextd, 3Brown1Blue, RAS-Optimize, AutoResearchClaw, \
+        Projects: Pigbet, AutoLog, 3Brown1Blue, RAS-Optimize, AutoResearchClaw, \
         Reallms, Deep Variance, GlazerAI, Thehuzz
         Research: Brain-Computer Interface, Neuroimaging, Image Registration, \
         Brain Extraction, Preprocessing, Monte Carlo Photon Transport, Diffuse Optical \
@@ -51,7 +51,7 @@ enum PromptTemplates {
         the subject of the work
         - Action words as topics ("Debugging", "Browsing", "Coding", "Reading")
         - Terminal tab names, usernames, or directory names as topics
-        - The tool "contextd" itself unless the user is actively developing it
+        - The tool "autolog" itself unless the user is actively developing it
 
         For activity_type, classify as exactly ONE of:
         - "coding" (writing, debugging, building, testing code)
@@ -285,7 +285,7 @@ enum PromptTemplates {
         - "Coding session"
 
         For key_topics, reuse canonical names when possible:
-        Pigbet, Contextd, 3Brown1Blue, Neuroimaging, Image Registration, \
+        Pigbet, AutoLog, 3Brown1Blue, Neuroimaging, Image Registration, \
         Python, Pytorch, Manim, Vllm, Slurm, Hpc, Bigred200, Gpu, \
         Job Search, Cv, Claude Code, Knowledge Graph, Startup, Dashboard
 

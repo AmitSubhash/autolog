@@ -6,7 +6,7 @@ struct ActivityRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
     /// Auto-incremented primary key
     var id: Int64?
 
-    /// Human-readable name for this activity (e.g., "Debugging contextd sleep-wake handling")
+    /// Human-readable name for this activity (e.g., "Debugging autolog sleep-wake handling")
     var name: String
 
     /// Optional longer description of the activity

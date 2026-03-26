@@ -9,7 +9,7 @@ struct StatusHeaderView: View {
 
     var body: some View {
         HStack {
-            Text("contextd")
+            Text("autolog")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.primary)
 

@@ -29,8 +29,9 @@ final class EnrichmentEngine: ObservableObject {
         self.storageManager = storageManager
         self.llmClient = llmClient
 
-        // Register available strategies
+        // Register available strategies (single-pass is default, two-pass as fallback)
         self.strategies = [
+            SinglePassStrategy(),
             TwoPassLLMStrategy(),
         ]
     }

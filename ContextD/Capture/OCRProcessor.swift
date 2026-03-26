@@ -34,10 +34,11 @@ final class OCRProcessor: Sendable {
             results = request.results as? [VNRecognizedTextObservation] ?? []
         }
 
-        // Configure for best accuracy
-        request.recognitionLevel = .accurate
-        request.usesLanguageCorrection = true
-        // Revision 3 is the latest as of macOS 14
+        // .fast is sufficient for rendered screen text (not handwriting) and uses
+        // ~3-5x less CPU than .accurate. Language correction adds a second pass that
+        // is unnecessary for pixel-perfect rendered fonts.
+        request.recognitionLevel = .fast
+        request.usesLanguageCorrection = false
         request.revision = VNRecognizeTextRequestRevision3
 
         let handler = VNImageRequestHandler(cgImage: image, options: [:])
@@ -166,8 +167,8 @@ final class OCRProcessor: Sendable {
             results = request.results as? [VNRecognizedTextObservation] ?? []
         }
 
-        request.recognitionLevel = .accurate
-        request.usesLanguageCorrection = true
+        request.recognitionLevel = .fast
+        request.usesLanguageCorrection = false
         request.revision = VNRecognizeTextRequestRevision3
 
         let handler = VNImageRequestHandler(cgImage: croppedImage, options: [:])

@@ -9,6 +9,7 @@ struct DebugTimelineView: View {
     @State private var summaries: [SummaryRecord] = []
     @State private var captureCount: Int = 0
     @State private var summaryCount: Int = 0
+    @State private var summarizedCaptureCount: Int = 0
     @State private var dbSizeBytes: Int64 = 0
     @State private var searchQuery: String = ""
     @State private var searchResults: [CaptureRecord] = []
@@ -248,13 +249,12 @@ struct DebugTimelineView: View {
                 }
 
                 statsSection("Summarization") {
-                    let summarized = captures.filter(\.isSummarized).count
-                    let unsummarized = captureCount - summarized
-                    statRow("Summarized", "\(summarized)")
+                    let unsummarized = captureCount - summarizedCaptureCount
+                    statRow("Summarized", "\(summarizedCaptureCount)")
                     statRow("Pending", "\(unsummarized)")
                     if captureCount > 0 {
                         ProgressView(
-                            value: Double(summarized),
+                            value: Double(summarizedCaptureCount),
                             total: Double(captureCount)
                         ) {
                             Text("Progress")
@@ -302,6 +302,7 @@ struct DebugTimelineView: View {
             summaries = try storageManager.recentSummaries(limit: 50)
             captureCount = try storageManager.captureCount()
             summaryCount = try storageManager.summaryCount()
+            summarizedCaptureCount = try storageManager.summarizedCaptureCount()
             dbSizeBytes = try storageManager.databaseSizeBytes()
             refreshError = nil
         } catch {

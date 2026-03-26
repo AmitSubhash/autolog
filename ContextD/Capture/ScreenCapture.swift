@@ -6,7 +6,7 @@ import AppKit
 /// This avoids macOS Sequoia's ScreenCaptureKit permission re-prompts entirely
 /// since `screencapture` is a pre-authorized system binary.
 ///
-/// The capture excludes contextd's own windows by temporarily hiding them
+/// The capture excludes autolog's own windows by temporarily hiding them
 /// during the screenshot, then restoring them immediately after.
 final class ScreenCapture: @unchecked Sendable {
     private let logger = DualLogger(category: "ScreenCapture")
@@ -15,7 +15,7 @@ final class ScreenCapture: @unchecked Sendable {
     private let maxWidth: CGFloat = 2560
 
     /// Temporary file path for screenshot output.
-    private let tempPath = NSTemporaryDirectory() + "contextd-capture.png"
+    private let tempPath = NSTemporaryDirectory() + "autolog-capture.png"
 
     /// Capture a screenshot of the main display.
     /// Async: runs screencapture process without blocking the MainActor.

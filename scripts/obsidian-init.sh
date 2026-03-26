@@ -1,10 +1,10 @@
 #!/bin/bash
-# One-time Obsidian vault initialization for contextd activity graph.
+# One-time Obsidian vault initialization for autolog activity graph.
 # Creates the vault directory structure and minimal Obsidian config.
 
 set -euo pipefail
 
-VAULT="$HOME/Documents/contextd-vault"
+VAULT="$HOME/Documents/autolog-vault"
 
 echo "Creating vault at $VAULT ..."
 mkdir -p "$VAULT"/{.obsidian,Activities,Apps,Topics,Daily,Maps,Reflections}
@@ -55,5 +55,5 @@ echo ""
 echo "Next steps:"
 echo "  1. Open Obsidian"
 echo "  2. 'Open folder as vault' -> select $VAULT"
-echo "  3. Run: python3 ~/contextd/scripts/obsidian-sync.py"
+echo "  3. Run: python3 ~/contextd/scripts/obsidian-sync.py"  # repo path unchanged
 echo "  4. Open the Graph View (Cmd+G in Obsidian)"

@@ -51,7 +51,7 @@ struct ActionsView: View {
                 modifiers: "Opt+Cmd"
             ) {
                 // Open Obsidian vault graph view instead of custom window
-                if let url = URL(string: "obsidian://open?vault=contextd-vault&view=graph") {
+                if let url = URL(string: "obsidian://open?vault=autolog-vault&view=graph") {
                     NSWorkspace.shared.open(url)
                 }
             }
@@ -121,7 +121,7 @@ struct QuitButton: View {
                     .foregroundStyle(isHovered ? .primary : .secondary)
                     .frame(width: 16, alignment: .center)
 
-                Text("Quit contextd")
+                Text("Quit autolog")
                     .font(.system(size: 13))
 
                 Spacer()

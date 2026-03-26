@@ -6,7 +6,7 @@ import NIOCore
 
 /// Manages a bearer token for API authentication.
 /// Generates a random token at startup and writes it to
-/// ~/.config/contextd/auth_token with mode 0600.
+/// ~/.config/autolog/auth_token with mode 0600.
 enum AuthTokenManager {
     /// The generated auth token for this process lifetime.
     static let token: String = {
@@ -24,7 +24,7 @@ enum AuthTokenManager {
     private static func writeTokenFile(_ token: String) {
         let logger = DualLogger(category: "AuthToken")
         let configDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/contextd")
+            .appendingPathComponent(".config/autolog")
         let tokenFile = configDir.appendingPathComponent("auth_token")
 
         do {

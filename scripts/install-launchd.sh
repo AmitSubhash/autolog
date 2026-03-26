@@ -1,6 +1,6 @@
 #!/bin/bash
-# Install all launchd agents for contextd.
-# Copies plists to ~/Library/LaunchAgents and loads them so contextd
+# Install all launchd agents for autolog.
+# Copies plists to ~/Library/LaunchAgents and loads them so autolog
 # services auto-start on login.
 #
 # Usage:
@@ -22,7 +22,7 @@ RESET='\033[0m'
 mkdir -p "$LAUNCHD_DIR"
 
 if [ "${1:-}" = "--remove" ]; then
-    echo -e "${CYAN}Removing contextd launchd agents...${RESET}"
+    echo -e "${CYAN}Removing autolog launchd agents...${RESET}"
     for plist in "$SRC_DIR"/com.contextd.*.plist; do
         [ -f "$plist" ] || continue
         name=$(basename "$plist")
@@ -34,11 +34,11 @@ if [ "${1:-}" = "--remove" ]; then
             echo -e "  (not installed: $name)"
         fi
     done
-    echo -e "${GREEN}All contextd launchd agents removed.${RESET}"
+    echo -e "${GREEN}All autolog launchd agents removed.${RESET}"
     exit 0
 fi
 
-echo -e "${CYAN}Installing contextd launchd agents...${RESET}"
+echo -e "${CYAN}Installing autolog launchd agents...${RESET}"
 echo -e "  Source:  $SRC_DIR"
 echo -e "  Target:  $LAUNCHD_DIR"
 echo ""
@@ -68,10 +68,10 @@ fi
 
 echo ""
 echo -e "${GREEN}All $installed launchd agents installed.${RESET}"
-echo -e "contextd will auto-start on login."
+echo -e "autolog will auto-start on login."
 echo ""
 echo "To verify:"
-echo "  launchctl list | grep contextd"
+echo "  launchctl list | grep contextd  # plist files still use contextd naming"
 echo ""
 echo "To remove:"
 echo "  ./scripts/install-launchd.sh --remove"

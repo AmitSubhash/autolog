@@ -1,7 +1,7 @@
 import Foundation
 
 /// Simple file-based storage for the API key.
-/// Stored at ~/Library/Application Support/ContextD/api_key.
+/// Stored at ~/Library/Application Support/AutoLog/api_key.
 /// No Keychain, no password prompts.
 enum KeychainHelper {
     private static let logger = DualLogger(category: "APIKeyStore")

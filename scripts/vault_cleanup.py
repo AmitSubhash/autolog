@@ -1,4 +1,4 @@
-"""One-time cleanup and reorganization of the contextd Obsidian vault.
+"""One-time cleanup and reorganization of the autolog Obsidian vault.
 
 Fixes:
 1. Topic normalization -- merges near-duplicate topics into canonical names
@@ -16,8 +16,8 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-VAULT = Path.home() / "Documents" / "contextd-vault"
-BACKUP = VAULT.parent / "contextd-vault-backup"
+VAULT = Path.home() / "Documents" / "autolog-vault"
+BACKUP = VAULT.parent / "autolog-vault-backup"
 
 # ── Topic normalization map ────────────────────────────────────────────
 # Maps variant names -> canonical name. Built from the actual vault analysis.
@@ -62,9 +62,9 @@ TOPIC_CANON: dict[str, str] = {
     # Database
     "database debugging": "Database",
     "database enrichment": "Database",
-    # Contextd
-    "contextd debugging": "Contextd",
-    "autolog": "Contextd",
+    # AutoLog
+    "contextd debugging": "AutoLog",
+    "autolog": "AutoLog",
     # Projects
     "personal projects": "Projects",
     # Portfolio

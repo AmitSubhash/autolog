@@ -13,7 +13,7 @@ struct DualLogger: Sendable {
     private let logger: Logger
     private let category: String
 
-    private static let subsystem = "com.contextd.app"
+    private static let subsystem = "com.autolog.app"
 
     /// Thread-safe timestamp format for stdout. Uses Date.FormatStyle instead of DateFormatter.
     private static let timestampStyle: Date.FormatStyle = .dateTime

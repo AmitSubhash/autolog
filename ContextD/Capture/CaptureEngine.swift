@@ -134,10 +134,12 @@ final class CaptureEngine: ObservableObject {
             interval = max(interval, 5.0)
         }
 
-        // Thermal throttling: enforce minimum 10s for serious/critical
+        // Thermal throttling: back off aggressively to let the machine cool down
         let thermal = ProcessInfo.processInfo.thermalState
-        if thermal == .serious || thermal == .critical {
-            interval = max(interval, 10.0)
+        if thermal == .critical {
+            interval = max(interval, 60.0)
+        } else if thermal == .serious {
+            interval = max(interval, 30.0)
         }
 
         return interval
@@ -359,7 +361,7 @@ final class CaptureEngine: ObservableObject {
         // Compute pixel diff off MainActor (CPU-intensive work).
         // Safe: only one diff runs at a time (sequential capture loop).
         nonisolated(unsafe) let differ = imageDiffer
-        let diffResult = await Task.detached(priority: .userInitiated) {
+        let diffResult = await Task.detached(priority: .utility) {
             differ.diff(current: currentImage, previous: prevImage)
         }.value
 
@@ -395,8 +397,8 @@ final class CaptureEngine: ObservableObject {
         metadata: AccessibilityReader.ScreenMetadata,
         changePercentage: Double
     ) async throws {
-        // Full-screen OCR
-        let ocrResult = try await Task.detached(priority: .userInitiated) { [ocrProcessor] in
+        // Full-screen OCR at .utility priority so macOS can throttle during interactive use
+        let ocrResult = try await Task.detached(priority: .utility) { [ocrProcessor] in
             try ocrProcessor.recognizeText(in: image)
         }.value
 
@@ -458,14 +460,31 @@ final class CaptureEngine: ObservableObject {
         metadata: AccessibilityReader.ScreenMetadata,
         diffResult: DiffResult
     ) async throws {
-        // Always do full-screen OCR so we capture ALL visible context,
-        // not just what changed. The diff is used for skip detection only.
-        let ocrResult = try await Task.detached(priority: .userInitiated) { [ocrProcessor] in
-            try ocrProcessor.recognizeText(in: image)
-        }.value
+        // Use partial OCR on changed regions when change is small (<50%).
+        // Falls back to full-screen OCR when regions > 8 (handled inside OCRProcessor).
+        let ocrResult: OCRProcessor.OCRResult
+        if !diffResult.changedRegions.isEmpty {
+            ocrResult = try await Task.detached(priority: .utility) { [ocrProcessor] in
+                try ocrProcessor.recognizeText(
+                    inRegions: diffResult.changedRegions,
+                    fullImage: image,
+                    fullImageSize: CGSize(width: image.width, height: image.height)
+                )
+            }.value
+        } else {
+            ocrResult = try await Task.detached(priority: .utility) { [ocrProcessor] in
+                try ocrProcessor.recognizeText(in: image)
+            }.value
+        }
 
         let deltaText = ocrResult.fullText
-        let fullOcrText = ocrResult.fullText
+        let fullOcrText: String
+        // For deltas with partial OCR, merge with keyframe text for complete context
+        if let kfText = currentKeyframeText, !diffResult.changedRegions.isEmpty {
+            fullOcrText = kfText
+        } else {
+            fullOcrText = ocrResult.fullText
+        }
 
         // Hash dedup on fullOcrText
         let normalizedText = fullOcrText.normalizedForDedup

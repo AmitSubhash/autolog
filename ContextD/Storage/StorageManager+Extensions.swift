@@ -268,6 +268,15 @@ extension StorageManager {
         }
     }
 
+    /// Get the number of captures that have been summarized.
+    func summarizedCaptureCount() throws -> Int {
+        try database.dbPool.read { db in
+            try CaptureRecord
+                .filter(CaptureRecord.Columns.isSummarized == true)
+                .fetchCount(db)
+        }
+    }
+
     /// Get the total database file size in bytes (main DB + WAL + SHM).
     func databaseSizeBytes() throws -> Int64 {
         let path = database.dbPool.path

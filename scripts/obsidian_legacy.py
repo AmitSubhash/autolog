@@ -14,7 +14,7 @@ from obsidian_helpers import sanitize_name
 
 logger = logging.getLogger("obsidian-sync")
 
-VAULT_PATH = Path.home() / "Documents" / "contextd-vault"
+VAULT_PATH = Path.home() / "Documents" / "autolog-vault"
 
 
 def _parse_ts(ts: str) -> datetime | None:

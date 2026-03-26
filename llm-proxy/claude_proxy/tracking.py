@@ -1,7 +1,7 @@
 """Usage tracking and improved token estimation.
 
 Persists daily request counts and estimated token totals to
-``~/.config/contextd/proxy_usage.json``. Auto-prunes entries older than
+``~/.config/autolog/proxy_usage.json``. Auto-prunes entries older than
 30 days on each write.
 """
 
@@ -17,7 +17,7 @@ from typing import Any
 
 logger = logging.getLogger("claude-proxy")
 
-USAGE_PATH = Path.home() / ".config" / "contextd" / "proxy_usage.json"
+USAGE_PATH = Path.home() / ".config" / "autolog" / "proxy_usage.json"
 RETENTION_DAYS = 30
 
 # Heuristic patterns that suggest code content

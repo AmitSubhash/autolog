@@ -13,7 +13,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 RESET='\033[0m'
 
-echo -e "${CYAN}ContextD Capture Pipeline Benchmark${RESET}"
+echo -e "${CYAN}AutoLog Capture Pipeline Benchmark${RESET}"
 echo "──────────────────────────────────────"
 echo ""
 
@@ -28,7 +28,7 @@ echo ""
 
 # Check if screencapture works (basic test)
 echo -e "${CYAN}Testing screencapture (macOS built-in)...${RESET}"
-TMPFILE=$(mktemp /tmp/contextd_bench_XXXX.png)
+TMPFILE=$(mktemp /tmp/autolog_bench_XXXX.png)
 START=$(python3 -c 'import time; print(time.time())')
 screencapture -x -C "$TMPFILE" 2>/dev/null
 END=$(python3 -c 'import time; print(time.time())')
@@ -43,7 +43,7 @@ echo ""
 
 # Quick OCR benchmark using the system screencapture + Vision CLI
 echo -e "${CYAN}Testing OCR performance (10 iterations)...${RESET}"
-TMPFILE=$(mktemp /tmp/contextd_bench_XXXX.png)
+TMPFILE=$(mktemp /tmp/autolog_bench_XXXX.png)
 screencapture -x -C "$TMPFILE" 2>/dev/null
 
 # Use swift inline to benchmark Vision OCR
