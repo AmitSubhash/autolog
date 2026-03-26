@@ -13,7 +13,7 @@ cat <<'EOF'
     <key>CFBundleExecutable</key>
     <string>ContextD</string>
     <key>CFBundleIdentifier</key>
-    <string>com.autolog.app</string>
+    <string>com.contextd.app</string>
     <key>CFBundleName</key>
     <string>AutoLog</string>
     <key>CFBundleDisplayName</key>
