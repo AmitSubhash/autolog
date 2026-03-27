@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.autolog.consolidate</string>
+    <string>com.contextd.consolidate</string>
 
     <key>ProgramArguments</key>
     <array>
@@ -18,8 +18,8 @@
     <integer>21600</integer>
 
     <key>StandardOutPath</key>
-    <string>/Users/amit/Library/Logs/autolog-consolidate.log</string>
+    <string>/Users/amit/Library/Logs/contextd-consolidate.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/amit/Library/Logs/autolog-consolidate.log</string>
+    <string>/Users/amit/Library/Logs/contextd-consolidate.log</string>
 </dict>
 </plist>
