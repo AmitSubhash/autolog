@@ -9,7 +9,6 @@ noise filtering to skip terminal metadata entities.
 from __future__ import annotations
 
 import re
-import urllib.parse
 from datetime import datetime
 
 # ── Topic normalization ────────────────────────────────────────────────
@@ -318,6 +317,15 @@ _NOISE_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"^\d{4}\.\d{2}\.\d{2}"),  # arxiv-style IDs
 ]
 
+_BROWSER_APPS: set[str] = {
+    "Safari",
+    "Google Chrome",
+    "Chrome",
+    "Brave Browser",
+    "Arc",
+    "Firefox",
+}
+
 
 def normalize_topic(name: str) -> str:
     """Normalize a topic name to its canonical form.
@@ -461,13 +469,97 @@ def _collect_urls(activity: dict, sessions: list[dict]) -> list[str]:
     return urls[:10]
 
 
+def compute_fragmentation_metrics(
+    sessions: list[dict], activities: list[dict] | None = None,
+) -> dict[str, object]:
+    """Compute a simple fragmentation score for a block or activity."""
+    total_seconds = 0.0
+    browser_seconds = 0.0
+    apps: set[str] = set()
+    for session in sessions:
+        app = session.get("app_name", "Unknown")
+        apps.add(app)
+        start = _parse_iso(session.get("start_timestamp", ""))
+        end = _parse_iso(session.get("end_timestamp", ""))
+        if start and end:
+            duration = max(0.0, (end - start).total_seconds())
+            total_seconds += duration
+            if app in _BROWSER_APPS:
+                browser_seconds += duration
+
+    topic_count = len({
+        normalize_topic(topic)
+        for activity in (activities or [])
+        for topic in activity.get("key_topics", [])
+    })
+    session_count = len(sessions)
+    app_count = len(apps)
+    browser_ratio = browser_seconds / total_seconds if total_seconds > 0 else 0.0
+
+    score = 0
+    score += max(0, session_count - 4) * 8
+    score += max(0, app_count - 2) * 12
+    score += int(browser_ratio * 35)
+    score += max(0, topic_count - 2) * 10
+    score = min(100, score)
+
+    if score < 25:
+        label = "Low"
+    elif score < 50:
+        label = "Moderate"
+    else:
+        label = "High"
+
+    return {
+        "score": score,
+        "label": label,
+        "session_count": session_count,
+        "app_count": app_count,
+        "topic_count": topic_count,
+        "browser_ratio": browser_ratio,
+    }
+
+
+def detect_artifacts(activity: dict, sessions: list[dict]) -> list[str]:
+    """Infer likely shipped artifacts from activity text and metadata."""
+    haystacks = [
+        activity.get("name", ""),
+        activity.get("description", ""),
+        " ".join(activity.get("document_paths", [])),
+        " ".join(activity.get("browser_urls", [])),
+    ]
+    for session in sessions:
+        haystacks.append(" ".join(session.get("window_titles", [])))
+        haystacks.append(" ".join(session.get("document_paths", [])))
+        haystacks.append(" ".join(session.get("browser_urls", [])))
+    text = " ".join(haystacks).lower()
+
+    artifacts: list[str] = []
+    checks = [
+        ("Commit", [" git commit", " committed", "staging and reviewing", "pull request"]),
+        ("Test Run", ["pytest", "unit test", "test render", "passed validation", "verifying"]),
+        ("Render", ["rendered", "rendering", ".mp4", "video output", "concatenated video"]),
+        ("Job Submission", ["submitted slurm job", "submitted a gpu job", "squeue", "sbatch"]),
+        ("Export", [".pdf", ".png", ".jpg", ".csv", "exported", "final output"]),
+    ]
+    for label, needles in checks:
+        if any(needle in text for needle in needles):
+            artifacts.append(label)
+    return artifacts
+
+
 # ---------------------------------------------------------------------------
 # Note builders
 # ---------------------------------------------------------------------------
 
 
 def build_activity_note(
-    activity: dict, sessions: list[dict], related: list[dict],
+    activity: dict,
+    sessions: list[dict],
+    related: list[dict],
+    focus_block: dict | None = None,
+    artifacts: list[str] | None = None,
+    fragmentation: dict[str, object] | None = None,
 ) -> str:
     """Build Markdown content for an Activity note."""
     start_ts = activity.get("start_timestamp", "")
@@ -509,6 +601,33 @@ def build_activity_note(
     if description:
         lines.extend([description, ""])
 
+    if focus_block:
+        block_title = focus_block.get("note_name") or focus_block.get("task", "Focus Block")
+        lines.append("## Intent")
+        lines.append(f"- **Declared task:** {focus_block.get('task', 'Unknown')}")
+        lines.append(f"- **Focus block:** [[{block_title}]]")
+        if focus_block.get("done_when"):
+            lines.append(f"- **Done when:** {focus_block['done_when']}")
+        if focus_block.get("artifact_goal"):
+            lines.append(f"- **Artifact goal:** {focus_block['artifact_goal']}")
+        lines.append("")
+
+    if fragmentation:
+        browser_ratio = float(fragmentation.get("browser_ratio", 0.0))
+        lines.append("## Focus Signals")
+        lines.append(
+            "- **Fragmentation:** "
+            f"{fragmentation.get('score', 0)}/100 ({fragmentation.get('label', 'Unknown')})"
+        )
+        lines.append(
+            f"- **Sessions:** {fragmentation.get('session_count', 0)}"
+            f" across {fragmentation.get('app_count', 0)} apps"
+        )
+        lines.append(f"- **Browser share:** {browser_ratio:.0%}")
+        if artifacts:
+            lines.append(f"- **Detected artifacts:** {', '.join(artifacts)}")
+        lines.append("")
+
     if app_sessions:
         lines.append("## Sessions")
         for entry in app_sessions:
@@ -547,6 +666,88 @@ def build_activity_note(
         lines.extend(f"- [[{t}]]" for t in norm_topics)
         lines.append("")
 
+    return "\n".join(lines)
+
+
+def build_block_note(
+    block: dict,
+    activities: list[dict],
+    sessions: list[dict],
+    fragmentation: dict[str, object],
+    artifacts: list[str],
+) -> str:
+    """Build Markdown content for a focus block note."""
+    start_dt = _parse_iso(block.get("started_at"))
+    end_dt = _parse_iso(block.get("ended_at"))
+    start_text = start_dt.strftime("%H:%M") if start_dt else "Unknown"
+    end_text = end_dt.strftime("%H:%M") if end_dt else "Active"
+    block_title = block.get("task", "Focus Block")
+    browser_ratio = float(fragmentation.get("browser_ratio", 0.0))
+
+    lines = [
+        "---",
+        "type: focus_block",
+        f'task: "{block_title}"',
+        f"date: {(start_dt or datetime.now()).strftime('%Y-%m-%d')}",
+        f"fragmentation_score: {fragmentation.get('score', 0)}",
+        "---",
+        "",
+        f"# {start_text} - {end_text}: {block_title}",
+        "",
+        f"**Declared success:** {block.get('done_when', '') or 'Not specified'}  ",
+        f"**Artifact goal:** {block.get('artifact_goal', '') or 'Not specified'}  ",
+        f"**Actual artifact:** {block.get('artifact', '') or 'Not recorded'}  ",
+        f"**Fragmentation:** {fragmentation.get('score', 0)}/100"
+        f" ({fragmentation.get('label', 'Unknown')})",
+        "",
+        "## Signals",
+        f"- **Sessions:** {fragmentation.get('session_count', 0)}",
+        f"- **Apps touched:** {fragmentation.get('app_count', 0)}",
+        f"- **Topic spread:** {fragmentation.get('topic_count', 0)}",
+        f"- **Browser share:** {browser_ratio:.0%}",
+        "",
+    ]
+
+    if activities:
+        lines.append("## Activities")
+        for activity in sorted(
+            activities, key=lambda item: item.get("start_timestamp", "")
+        ):
+            duration = _duration_minutes(
+                activity.get("start_timestamp", ""),
+                activity.get("end_timestamp", ""),
+            )
+            start_time = _parse_iso(activity.get("start_timestamp", ""))
+            prefix = start_time.strftime("%H:%M") if start_time else "--:--"
+            lines.append(
+                f"- **{prefix}** [[{activity.get('name', 'Unknown Activity')}]] "
+                f"({format_duration(duration * 60)})"
+            )
+        lines.append("")
+
+    app_usage = _aggregate_sessions(sessions)
+    if app_usage:
+        lines.append("## Apps")
+        for entry in app_usage[:8]:
+            lines.append(
+                f"- **{entry['app_name']}** ({format_duration(entry['total_seconds'])})"
+            )
+        lines.append("")
+
+    if artifacts:
+        lines.append("## Detected Artifacts")
+        for artifact in artifacts:
+            lines.append(f"- {artifact}")
+        lines.append("")
+
+    lines.append("## Review")
+    if block.get("score") is not None:
+        lines.append(f"- **Score:** {block['score']}/10")
+    if block.get("notes"):
+        lines.append(f"- **Notes:** {block['notes']}")
+    if block.get("status"):
+        lines.append(f"- **Status:** {block['status']}")
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -597,13 +798,41 @@ def build_topic_note(
     return "\n".join(lines)
 
 
+def _time_block(hour: int) -> str:
+    """Return a time-of-day label for grouping activities."""
+    if hour < 6:
+        return "Late Night"
+    if hour < 12:
+        return "Morning"
+    if hour < 17:
+        return "Afternoon"
+    if hour < 21:
+        return "Evening"
+    return "Night"
+
+
+def _primary_topic(act: dict) -> str:
+    """Extract the primary (first) normalized topic from an activity."""
+    topics = act.get("key_topics", [])
+    if topics:
+        return normalize_topic(topics[0])
+    return "General"
+
+
+CONFIDENCE_THRESHOLD = 0.6
+
+
 def build_daily_note(
     date: datetime,
     app_usage: list[dict],
     activities: list[dict],
     all_sessions: list[dict] | None = None,
+    focus_blocks: list[dict] | None = None,
 ) -> str:
     """Build Markdown content for a Daily note.
+
+    Filters out low-confidence activities, groups by topic, and includes
+    descriptions and time ranges for meaningful summaries.
 
     Parameters
     ----------
@@ -636,11 +865,17 @@ def build_daily_note(
             if start and end:
                 entry["total_seconds"] += (end - start).total_seconds()
             entry["session_count"] += 1
-        if by_app:
-            app_usage = [
-                {"app_name": k, **v} for k, v in by_app.items()
-            ]
+        # Always use per-day data when sessions are available, even if
+        # empty (avoids leaking global aggregate into the wrong date).
+        app_usage = [{"app_name": k, **v} for k, v in by_app.items()]
 
+    # Total tracked time
+    total_seconds = sum(e.get("total_seconds", 0) for e in app_usage)
+    if total_seconds > 0:
+        lines.append(f"*{format_duration(total_seconds)} tracked*")
+        lines.append("")
+
+    # App usage table
     if app_usage:
         sorted_usage = sorted(
             app_usage, key=lambda x: x.get("total_seconds", 0), reverse=True,
@@ -653,18 +888,117 @@ def build_daily_note(
             lines.append(f"| {app} | {dur} | {cnt} |")
         lines.append("")
 
-    if activities:
-        # Sort by duration descending
-        def _act_dur(act: dict) -> int:
-            return _duration_minutes(
-                act.get("start_timestamp", ""), act.get("end_timestamp", ""),
-            )
-        sorted_acts = sorted(activities, key=_act_dur, reverse=True)
+    if not activities:
+        return "\n".join(lines)
+
+    # Split activities by confidence
+    high_conf = [a for a in activities if a.get("confidence", 0) >= CONFIDENCE_THRESHOLD]
+    low_conf = [a for a in activities if a.get("confidence", 0) < CONFIDENCE_THRESHOLD]
+
+    def _act_dur(act: dict) -> int:
+        return _duration_minutes(
+            act.get("start_timestamp", ""), act.get("end_timestamp", ""),
+        )
+
+    # Group high-confidence activities by primary topic
+    by_topic: dict[str, list[dict]] = {}
+    for act in high_conf:
+        topic = _primary_topic(act)
+        by_topic.setdefault(topic, []).append(act)
+
+    # Sort topic groups by total duration descending
+    topic_order = sorted(
+        by_topic.keys(),
+        key=lambda t: sum(_act_dur(a) for a in by_topic[t]),
+        reverse=True,
+    )
+
+    if topic_order:
         lines.append("## Activities")
-        for act in sorted_acts:
-            act_name = act.get("name", "Unknown")
-            dur = _act_dur(act)
-            lines.append(f"- [[{act_name}]] ({dur} min)")
+        lines.append("")
+        for topic in topic_order:
+            topic_acts = sorted(by_topic[topic], key=_act_dur, reverse=True)
+            topic_total = sum(_act_dur(a) for a in topic_acts)
+            lines.append(f"### {topic} ({format_duration(topic_total * 60)})")
+            lines.append("")
+            for act in topic_acts:
+                name = act.get("name", "Unknown")
+                dur = _act_dur(act)
+                desc = act.get("description", "")
+                start_dt = _parse_iso(act.get("start_timestamp", ""))
+                time_str = start_dt.strftime("%H:%M") if start_dt else ""
+
+                # Activity line with time and duration
+                dur_str = format_duration(dur * 60)
+                if time_str:
+                    lines.append(f"- **{time_str}** [[{name}]] ({dur_str})")
+                else:
+                    lines.append(f"- [[{name}]] ({dur_str})")
+
+                # Description (first sentence or first 120 chars)
+                if desc:
+                    short_desc = desc.split(". ")[0]
+                    if len(short_desc) > 120:
+                        short_desc = short_desc[:120].rsplit(" ", 1)[0] + "..."
+                    lines.append(f"  - {short_desc}")
+
+                # Secondary topics as tags
+                all_topics = act.get("key_topics", [])
+                if len(all_topics) > 1:
+                    tags = [normalize_topic(t) for t in all_topics[1:]]
+                    tag_links = ", ".join(f"[[{t}]]" for t in tags)
+                    lines.append(f"  - Related: {tag_links}")
+            lines.append("")
+
+    if focus_blocks:
+        lines.append("## Focus Blocks")
+        for block in sorted(focus_blocks, key=lambda item: item.get("started_at", "")):
+            started = _parse_iso(block.get("started_at"))
+            ended = _parse_iso(block.get("ended_at"))
+            time_label = (
+                f"{started.strftime('%H:%M') if started else '--:--'}"
+                f"-{ended.strftime('%H:%M') if ended else 'active'}"
+            )
+            block_name = block.get("note_name", block.get("task", "Focus Block"))
+            score = block.get("fragmentation_score")
+            suffix = f" | frag {score}/100" if score is not None else ""
+            lines.append(f"- **{time_label}** [[{block_name}]]{suffix}")
+        lines.append("")
+
+    # Timeline view
+    time_blocks: dict[str, int] = {}
+    for act in high_conf:
+        start_dt = _parse_iso(act.get("start_timestamp", ""))
+        if start_dt:
+            block = _time_block(start_dt.hour)
+            time_blocks[block] = time_blocks.get(block, 0) + _act_dur(act)
+
+    if time_blocks:
+        lines.append("## Timeline")
+        block_order = ["Late Night", "Morning", "Afternoon", "Evening", "Night"]
+        for block in block_order:
+            if block in time_blocks:
+                lines.append(f"- **{block}:** {format_duration(time_blocks[block] * 60)}")
+        lines.append("")
+
+    # Summary of low-confidence (background) sessions
+    if low_conf:
+        bg_total = sum(_act_dur(a) for a in low_conf)
+        lines.append(
+            f"> {len(low_conf)} background sessions "
+            f"({format_duration(bg_total * 60)}) not categorized"
+        )
+        lines.append("")
+
+    # Collect all unique topics for the day as tag links
+    all_day_topics = list(dict.fromkeys(
+        normalize_topic(t)
+        for act in high_conf
+        for t in act.get("key_topics", [])
+    ))
+    if all_day_topics:
+        lines.append("## Topics")
+        lines.append(" ".join(f"[[{t}]]" for t in all_day_topics))
         lines.append("")
 
     return "\n".join(lines)

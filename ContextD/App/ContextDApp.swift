@@ -60,6 +60,12 @@ private struct MenuBarIconView: View {
     }
 
     private var iconName: String {
+        let focusSnapshot = FocusStateStore.currentSnapshot(
+            storageManager: ServiceContainer.shared.storageManager
+        )
+        if focusSnapshot.current != nil, focusSnapshot.drift?.level == "drifting" {
+            return "exclamationmark.circle"
+        }
         guard captureEngine.isRunning else {
             return "eye.slash"
         }

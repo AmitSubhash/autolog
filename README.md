@@ -49,6 +49,74 @@ AutoLog syncs to an Obsidian vault with `[[wikilinks]]` so you can explore your 
 - **Topic notes** -- every extracted topic links back to the activities where it appeared.
 - **Daily notes** -- app usage table + activity list for the day.
 
+## Focus workflow
+
+AutoLog can also track declared focus blocks, not just passive activity. The model is simple:
+
+- **Emacs/Org owns intent** -- what you said you were trying to do
+- **AutoLog owns evidence** -- what apps, sessions, and artifacts actually happened
+
+This creates a useful separation: planning lives in Org, but productivity and drift are judged from captured behavior.
+
+### File contract
+
+Focus blocks are stored as small local files:
+
+- `~/.config/autolog/focus-state.json` -- the current active block
+- `~/.config/autolog/focus-blocks.jsonl` -- completed/interrupted block history
+- `~/org/today.org` -- daily dashboard
+- `~/org/autolog-scorecard.org` -- review log
+
+When you start a block, Emacs writes the declared task, done condition, artifact goal, and drift budget. When you stop a block, AutoLog appends the finalized block to the log and writes a compact Org review entry to the scorecard.
+
+### Emacs commands
+
+The helper script lives at `scripts/autolog-focus.el` and is intended to be loaded from your Doom config. The default keybindings are:
+
+```text
+SPC n z s  start focus block
+SPC n z e  stop focus block
+SPC n z t  show current active block
+SPC n z l  show recent blocks
+SPC n z p  show productivity summary
+SPC n z c  open scorecard
+SPC n z d  open today dashboard
+```
+
+Starting a block prompts for:
+
+- task
+- done condition
+- artifact goal
+- drift budget in minutes
+
+Stopping a block prompts for:
+
+- actual artifact
+- self-score `/10`
+- notes on drift or execution
+
+### Productivity metrics
+
+Recent productivity is computed directly from focus-block history. The report currently tracks:
+
+- total blocks
+- completed vs interrupted vs abandoned
+- completion rate
+- artifact rate
+- total focus time
+- completed focus time
+- average block length
+- deep blocks (`>=60m`)
+- average self-score
+- completed-day streak
+- daily breakdown
+
+This is meant to answer two different questions:
+
+- `recent blocks` -- am I actually finishing blocks?
+- `productivity summary` -- is the week producing real artifacts or just motion?
+
 ## Architecture
 
 | Component | What it does |
@@ -90,6 +158,8 @@ GET  /v1/activities/:id/sessions  -- sessions for an activity
 GET  /v1/activities/:id/related   -- related activities via links
 GET  /v1/graph              -- full activity graph (nodes + edges)
 GET  /v1/entities           -- query by entity type/value
+GET  /v1/focus/current      -- active focus block + drift snapshot
+GET  /v1/focus/blocks       -- recent focus block history
 POST /v1/search             -- full-text search across summaries
 POST /v1/semantic-search    -- TF-IDF similarity search
 ```
@@ -126,6 +196,25 @@ python3 scripts/obsidian-sync.py 4
 ```
 
 Set up as a launchd agent for automatic sync (plist templates in `launchd/`).
+
+### Focus block CLI
+
+```bash
+# Start a block
+python3 scripts/focus_state.py start --task "Write preprocessing note" \
+  --done-when "one final draft exists" \
+  --artifact-goal "saved note" \
+  --drift-budget 10
+
+# Show current block
+python3 scripts/focus_state.py status
+
+# Show recent blocks
+python3 scripts/focus_state.py list --include-open --limit 10
+
+# Show 7-day productivity summary
+python3 scripts/focus_state.py productivity --days 7
+```
 
 ### Configuration
 

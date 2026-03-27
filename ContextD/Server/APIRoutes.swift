@@ -19,6 +19,7 @@ extension APIServer {
         registerSessionsRoute(on: router, storage: storage, log: log)
         registerAppUsageRoute(on: router, storage: storage, log: log)
         registerInferredActivitiesRoutes(on: router, storage: storage, log: log)
+        registerFocusRoutes(on: router, storage: storage, log: log)
         registerDocsRoutes(on: router)
     }
 

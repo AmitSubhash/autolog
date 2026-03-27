@@ -20,6 +20,8 @@ struct MenuBarView: View {
     @State private var lastError: String?
     @State private var lastSummaryDate: Date?
     @State private var pendingCaptures: Int = 0
+    @State private var focusState: AutoLogFocusState?
+    @State private var focusDrift: FocusDriftMetrics?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -41,6 +43,15 @@ struct MenuBarView: View {
             )
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
+
+            if focusState != nil {
+                FocusStatusView(
+                    focusState: focusState,
+                    drift: focusDrift
+                )
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
+            }
 
             // Summarization health indicator
             SummarizationStatusView(
@@ -105,6 +116,10 @@ struct MenuBarView: View {
     /// Capture a fresh snapshot of stats each time the menu opens.
     private func snapshotState() {
         lastError = captureEngine.lastError
+
+        let focusSnapshot = FocusStateStore.currentSnapshot(storageManager: storageManager)
+        focusState = focusSnapshot.current
+        focusDrift = focusSnapshot.drift
 
         guard let storage = storageManager else { return }
 

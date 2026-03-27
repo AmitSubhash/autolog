@@ -269,3 +269,54 @@ struct EntityQueryResponse: Codable, Sendable {
     let entity_value: String
     let activities: [InferredActivityItem]
 }
+
+// MARK: - Focus Endpoint
+
+struct FocusStateItem: Codable, Sendable {
+    let id: String
+    let task: String
+    let task_slug: String?
+    let started_at: String
+    let done_when: String?
+    let artifact_goal: String?
+    let artifact: String?
+    let drift_budget_minutes: Int?
+    let source: String?
+    let status: String?
+}
+
+struct FocusBlockItem: Codable, Sendable {
+    let id: String
+    let task: String
+    let task_slug: String?
+    let started_at: String
+    let ended_at: String?
+    let done_when: String?
+    let artifact_goal: String?
+    let artifact: String?
+    let drift_budget_minutes: Int?
+    let score: Int?
+    let notes: String?
+    let source: String?
+    let status: String?
+}
+
+struct FocusDriftItem: Codable, Sendable {
+    let level: String
+    let fragmentation_score: Int
+    let session_count: Int
+    let app_count: Int
+    let browser_ratio: Double
+    let elapsed_minutes: Int
+    let reasons: [String]
+}
+
+struct FocusStatusResponse: Codable, Sendable {
+    let current: FocusStateItem?
+    let drift: FocusDriftItem?
+}
+
+struct FocusBlocksResponse: Codable, Sendable {
+    let blocks: [FocusBlockItem]
+    let total: Int
+}

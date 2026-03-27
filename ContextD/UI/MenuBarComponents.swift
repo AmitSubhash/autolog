@@ -147,6 +147,83 @@ private struct StatCard: View {
     }
 }
 
+// MARK: - Focus Status
+
+struct FocusStatusView: View {
+    let focusState: AutoLogFocusState?
+    let drift: FocusDriftMetrics?
+
+    var body: some View {
+        Group {
+            if let focusState {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Current Task")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if let drift {
+                        Text(drift.level.capitalized)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(levelColor(for: drift.level))
+                    }
+                }
+
+                Text(focusState.task)
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(2)
+
+                if let doneWhen = focusState.doneWhen, !doneWhen.isEmpty {
+                    Text("Done when: \(doneWhen)")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                if let drift {
+                    HStack(spacing: 10) {
+                        Label("\(drift.elapsedMinutes)m", systemImage: "timer")
+                        Label("\(drift.fragmentationScore)/100", systemImage: "square.stack.3d.up")
+                        Label("\(Int(drift.browserRatio * 100))%", systemImage: "safari")
+                    }
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                    Text(drift.reasons.joined(separator: " • "))
+                        .font(.system(size: 10))
+                        .foregroundStyle(levelColor(for: drift.level))
+                        .lineLimit(2)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(backgroundStyle)
+            )
+            }
+        }
+    }
+
+    private var backgroundStyle: AnyShapeStyle {
+        if let drift, drift.level == "drifting" {
+            return AnyShapeStyle(Color.orange.opacity(0.12))
+        }
+        return AnyShapeStyle(.quaternary.opacity(0.45))
+    }
+
+    private func levelColor(for level: String) -> Color {
+        switch level {
+        case "drifting":
+            return .orange
+        case "watch":
+            return .yellow
+        default:
+            return .green
+        }
+    }
+}
+
 // MARK: - Interval Indicator
 
 /// Shows capture speed picker and current interval status.
@@ -410,4 +487,3 @@ struct WarningBannerView: View {
         }
     }
 }
-

@@ -7,7 +7,7 @@ set -euo pipefail
 VAULT="$HOME/Documents/autolog-vault"
 
 echo "Creating vault at $VAULT ..."
-mkdir -p "$VAULT"/{.obsidian,Activities,Apps,Topics,Daily,Maps,Reflections}
+mkdir -p "$VAULT"/{.obsidian,Activities,Apps,Topics,Daily,Blocks,Maps,Reflections}
 
 # Minimal Obsidian app config
 cat > "$VAULT/.obsidian/app.json" << 'JSON'
