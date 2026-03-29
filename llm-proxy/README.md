@@ -1,10 +1,12 @@
-# Claude Proxy: Your Personal Claude API
+# LLM Proxy Server for Claude Code
 
-Turn `claude -p` (Claude Code's headless mode) into a full OpenAI-compatible HTTP API. Any tool, script, or app that speaks the OpenAI chat completions format can now use Claude -- no API key management, no billing dashboard, just your existing Claude Code subscription.
+Turn `claude -p` (Claude Code's headless mode) into a reusable OpenAI-compatible HTTP API. Any tool, script, or app that speaks the OpenAI chat completions format can now use Claude through a common local server.
+
+This folder is intentionally structured as a small boilerplate package you can lift into other projects or install directly.
 
 ## Why
 
-Claude Code includes `claude -p`, a CLI that takes a prompt on stdin and returns a response. It's powerful but awkward to integrate -- it's a subprocess, not an API. This proxy wraps it in a proper HTTP server with:
+Claude Code includes `claude -p`, a CLI that takes a prompt on stdin and returns a response. It's powerful but awkward to integrate because it is a subprocess, not an API. This proxy wraps it in a proper HTTP server with:
 
 - OpenAI-compatible `/v1/chat/completions` endpoint
 - Priority queue (Sonnet/Opus requests skip ahead of Haiku)
@@ -18,21 +20,35 @@ Claude Code includes `claude -p`, a CLI that takes a prompt on stdin and returns
 ### Prerequisites
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
-- Python 3.10+
+- Python 3.11+
+
+### Install it
+
+```bash
+# From this repo
+cd llm-proxy
+python3 -m pip install -e .
+
+# Or with pipx for a standalone CLI
+pipx install .
+```
 
 ### Run it
 
 ```bash
 cd llm-proxy
-python3 claude_proxy.py --port 21891
+claude-proxy --port 11434
+
+# Equivalent
+python -m claude_proxy --port 11434
 ```
 
-That's it. The proxy is now listening on `http://127.0.0.1:21891`.
+That's it. The proxy is now listening on `http://127.0.0.1:11434`.
 
 ### Test it
 
 ```bash
-curl -X POST http://127.0.0.1:21891/v1/chat/completions \
+curl -X POST http://127.0.0.1:11434/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "anthropic/claude-sonnet-4-6",
@@ -118,7 +134,7 @@ Returns usage statistics:
 ```python
 import requests
 
-response = requests.post("http://127.0.0.1:21891/v1/chat/completions", json={
+response = requests.post("http://127.0.0.1:11434/v1/chat/completions", json={
     "model": "anthropic/claude-sonnet-4-6",
     "messages": [
         {"role": "system", "content": "You are a concise assistant."},
@@ -134,7 +150,7 @@ print(response.json()["choices"][0]["message"]["content"])
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://127.0.0.1:21891/v1",
+    base_url="http://127.0.0.1:11434/v1",
     api_key="not-needed",  # proxy doesn't check keys
 )
 
@@ -148,7 +164,7 @@ print(response.choices[0].message.content)
 ### JavaScript / Node.js
 
 ```javascript
-const response = await fetch("http://127.0.0.1:21891/v1/chat/completions", {
+const response = await fetch("http://127.0.0.1:11434/v1/chat/completions", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
@@ -163,7 +179,7 @@ console.log(data.choices[0].message.content);
 ### curl (one-liner)
 
 ```bash
-curl -s http://127.0.0.1:21891/v1/chat/completions \
+curl -s http://127.0.0.1:11434/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"anthropic/claude-haiku-4-5","messages":[{"role":"user","content":"Say hi"}]}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['choices'][0]['message']['content'])"
@@ -175,10 +191,10 @@ If you want to access the proxy from a remote server (e.g., an HPC cluster):
 
 ```bash
 # On the remote machine, create a tunnel to your laptop
-ssh -L 21891:localhost:21891 your-laptop-hostname
+ssh -L 11434:localhost:11434 your-laptop-hostname
 
 # Now requests on the remote machine hit your laptop's proxy
-curl http://localhost:21891/health
+curl http://localhost:11434/health
 ```
 
 ### From other devices on your network
@@ -192,7 +208,7 @@ ipconfig getifaddr en0   # macOS
 Then from any device:
 
 ```bash
-curl http://YOUR_IP:21891/v1/chat/completions \
+curl http://YOUR_IP:11434/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"anthropic/claude-haiku-4-5","messages":[{"role":"user","content":"Hello from my phone!"}]}'
 ```
@@ -246,7 +262,7 @@ set -euo pipefail
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/opt/python@3.11/libexec/bin:/usr/local/bin:$PATH"
 
 cd "$(dirname "$0")"
-exec python3 claude_proxy.py --port 21891
+exec claude-proxy --port 11434
 ```
 
 Without this, the proxy will start but every request will fail with "claude CLI not found on PATH" -- the health check passes but nothing works. This is the #1 gotcha.
