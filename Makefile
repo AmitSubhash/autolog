@@ -3,7 +3,7 @@
 # Run `make help` to see all available targets.
 
 PRODUCT     := ContextD
-BUNDLE_ID   := com.contextd.app
+BUNDLE_ID   := com.autolog.app
 BUILD_DIR   := .build
 DEBUG_BIN   := $(BUILD_DIR)/debug/$(PRODUCT)
 RELEASE_BIN := $(BUILD_DIR)/release/$(PRODUCT)
@@ -277,16 +277,16 @@ reset-db: ## Delete the local database (destructive!)
 # ─────────────────────────────────────────
 
 logs: ## Stream ContextD logs from unified logging (live)
-	@echo "$(CYAN)Streaming logs for com.contextd.app... (Ctrl+C to stop)$(RESET)"
-	@log stream --predicate 'subsystem == "com.contextd.app"' --style compact
+	@echo "$(CYAN)Streaming logs for $(BUNDLE_ID)... (Ctrl+C to stop)$(RESET)"
+	@log stream --predicate 'subsystem == "$(BUNDLE_ID)"' --style compact
 
 logs-recent: ## Show recent ContextD log entries
-	@echo "$(CYAN)Recent logs for com.contextd.app:$(RESET)"
-	@log show --predicate 'subsystem == "com.contextd.app"' --style compact --last 5m
+	@echo "$(CYAN)Recent logs for $(BUNDLE_ID):$(RESET)"
+	@log show --predicate 'subsystem == "$(BUNDLE_ID)"' --style compact --last 5m
 
 logs-errors: ## Show only error-level log entries
-	@echo "$(RED)Error logs for com.contextd.app:$(RESET)"
-	@log show --predicate 'subsystem == "com.contextd.app" AND messageType == error' --style compact --last 1h
+	@echo "$(RED)Error logs for $(BUNDLE_ID):$(RESET)"
+	@log show --predicate 'subsystem == "$(BUNDLE_ID)" AND messageType == error' --style compact --last 1h
 
 # ─────────────────────────────────────────
 #  App Bundle (for proper permissions)
@@ -299,7 +299,7 @@ bundle: build ## Create a .app bundle (needed for proper permission prompts)
 	@cp $(DEBUG_BIN) "$(APP_BUNDLE)/Contents/MacOS/$(PRODUCT)"
 	@./scripts/gen-info-plist.sh > "$(APP_BUNDLE)/Contents/Info.plist"
 	@if [ -f Resources/contextd.icns ]; then \
-		cp Resources/contextd.icns "$(APP_BUNDLE)/Contents/Resources/contextd.icns"; \
+		cp Resources/contextd.icns "$(APP_BUNDLE)/Contents/Resources/autolog.icns"; \
 		echo "  $(GREEN)Icon installed$(RESET)"; \
 	fi
 	@if security find-identity -v -p codesigning 2>/dev/null | grep -q "ContextD Dev"; then \
@@ -326,11 +326,12 @@ install: release ## Install release binary to /usr/local/bin
 
 INSTALLED_APP := /Applications/AutoLog.app
 
-install-app: release ## Build, sign, and install to /Applications/AutoLog.app (preserves permissions)
+install-app: bundle ## Build, sign, and install to /Applications/AutoLog.app
 	@echo "$(CYAN)Installing to $(INSTALLED_APP)...$(RESET)"
 	@killall $(PRODUCT) 2>/dev/null || true
 	@sleep 1
-	@cp $(RELEASE_BIN) "$(INSTALLED_APP)/Contents/MacOS/$(PRODUCT)"
+	@mkdir -p "$(INSTALLED_APP)"
+	@rsync -a --delete "$(APP_BUNDLE)/" "$(INSTALLED_APP)/"
 	@if security find-identity -v -p codesigning 2>/dev/null | grep -q "ContextD Dev"; then \
 		codesign --force --deep --sign "ContextD Dev" \
 			--entitlements Resources/ContextD.entitlements \

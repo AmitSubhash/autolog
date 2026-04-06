@@ -23,7 +23,7 @@ mkdir -p "$LAUNCHD_DIR"
 
 if [ "${1:-}" = "--remove" ]; then
     echo -e "${CYAN}Removing autolog launchd agents...${RESET}"
-    for plist in "$SRC_DIR"/com.contextd.*.plist; do
+    for plist in "$SRC_DIR"/com.autolog.*.plist; do
         [ -f "$plist" ] || continue
         name=$(basename "$plist")
         if [ -f "$LAUNCHD_DIR/$name" ]; then
@@ -44,7 +44,7 @@ echo -e "  Target:  $LAUNCHD_DIR"
 echo ""
 
 installed=0
-for plist in "$SRC_DIR"/com.contextd.*.plist; do
+for plist in "$SRC_DIR"/com.autolog.*.plist; do
     [ -f "$plist" ] || continue
     name=$(basename "$plist")
 
@@ -71,7 +71,7 @@ echo -e "${GREEN}All $installed launchd agents installed.${RESET}"
 echo -e "autolog will auto-start on login."
 echo ""
 echo "To verify:"
-echo "  launchctl list | grep contextd  # plist files still use contextd naming"
+echo "  launchctl list | grep autolog"
 echo ""
 echo "To remove:"
 echo "  ./scripts/install-launchd.sh --remove"

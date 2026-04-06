@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.contextd.app</string>
+    <string>com.autolog.app</string>
 
     <key>ProgramArguments</key>
     <array>
@@ -15,8 +15,8 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/amit/Library/Logs/contextd-app.log</string>
+    <string>/Users/amit/Library/Logs/autolog-app.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/amit/Library/Logs/contextd-app.err</string>
+    <string>/Users/amit/Library/Logs/autolog-app.err</string>
 </dict>
 </plist>

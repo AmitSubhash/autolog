@@ -45,3 +45,4 @@ xcuserdata/
 *.pyc
 __pycache__/
 .ruff_cache/
+.collaborator
