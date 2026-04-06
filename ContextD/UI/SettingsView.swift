@@ -13,9 +13,9 @@ struct SettingsView: View {
         static let captureInterval: Double = 2.0
         static let maxKeyframeInterval: Double = 60
         static let keyframeChangeThreshold: Double = 0.50
-        static let chunkDuration: Double = 300
+        static let chunkDuration: Double = 60
         static let pollInterval: Double = 60
-        static let minAge: Double = 300
+        static let minAge: Double = 60
         static let apiServerEnabled = true
         static let apiServerPort = 21890
         static let retentionDays = 7
@@ -35,17 +35,9 @@ struct SettingsView: View {
     }
 
     // LLM Provider Settings
-    enum LLMProvider: String, CaseIterable, Identifiable {
-        case proxy = "Local Proxy (claude -p)"
-        case openrouter = "OpenRouter API"
-        var id: String { rawValue }
-    }
-
-    @AppStorage("llmEndpointURL") private var customEndpointURL: String = ""
-    @State private var selectedProvider: LLMProvider = .openrouter
-    @State private var proxyURL: String = "http://127.0.0.1:11434/v1/chat/completions"
-    @State private var proxyTestResult: String?
-    @State private var proxyTesting: Bool = false
+    @AppStorage("llmProvider") private var llmProviderRawValue: String = LLMProvider.claude.rawValue
+    @State private var selectedProvider: LLMProvider = .claude
+    @State private var claudeAvailable: Bool = false
     @State private var apiKey: String = ""
     @State private var hasApiKey: Bool = false
     @AppStorage("summarizationModel") private var summarizationModel: String = Defaults.summarizationModel
@@ -144,14 +136,9 @@ struct SettingsView: View {
         .padding(20)
         .frame(width: 580, height: 500)
         .onAppear {
+            claudeAvailable = ClaudeShellClient.isAvailable()
             hasApiKey = OpenRouterClient.hasAPIKey()
-            // Detect current provider from stored endpoint URL
-            if customEndpointURL.isEmpty {
-                selectedProvider = .openrouter
-            } else {
-                selectedProvider = .proxy
-                proxyURL = customEndpointURL
-            }
+            selectedProvider = LLMProvider(rawValue: llmProviderRawValue) ?? .claude
         }
     }
 
@@ -162,30 +149,19 @@ struct SettingsView: View {
             Section("LLM Provider") {
                 Picker("Provider:", selection: $selectedProvider) {
                     ForEach(LLMProvider.allCases) { provider in
-                        Text(provider.rawValue).tag(provider)
+                        Text(provider.displayName).tag(provider)
                     }
                 }
                 .pickerStyle(.segmented)
+                .onChange(of: selectedProvider) { _, newValue in
+                    llmProviderRawValue = newValue.rawValue
+                    hasApiKey = OpenRouterClient.hasAPIKey()
+                }
 
-                if selectedProvider == .proxy {
-                    proxySettingsView
-
-                    Button("Apply Proxy") {
-                        applyLLMProvider(.proxy)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(proxyURL.isEmpty)
+                if selectedProvider == .claude {
+                    claudeSettingsView
                 } else {
                     apiKeySettingsView
-
-                    if customEndpointURL != "" {
-                        Button("Switch to OpenRouter") {
-                            applyLLMProvider(.openrouter)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                    }
                 }
             }
 
@@ -272,29 +248,17 @@ struct SettingsView: View {
 
     // MARK: - LLM Provider Views
 
-    private var proxySettingsView: some View {
+    private var claudeSettingsView: some View {
         Group {
-            HStack {
-                TextField("Proxy URL", text: $proxyURL)
-                    .textFieldStyle(.roundedBorder)
-
-                Button(proxyTesting ? "Testing..." : "Test") {
-                    testProxyConnection()
-                }
-                .disabled(proxyURL.isEmpty || proxyTesting)
-            }
-
-            Text("Run `claude -p` to start a local proxy, then point AutoLog at it.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            if let result = proxyTestResult {
-                HStack {
-                    Image(systemName: result.starts(with: "OK") ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundStyle(result.starts(with: "OK") ? .green : .red)
-                    Text(result)
+            HStack(spacing: 8) {
+                Image(systemName: claudeAvailable ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .foregroundStyle(claudeAvailable ? .green : .red)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(claudeAvailable ? "Claude CLI found" : "Claude CLI not found")
+                        .font(.system(size: 12, weight: .medium))
+                    Text("Uses your Claude Code session directly. No proxy or API key needed.")
                         .font(.caption)
-                        .foregroundStyle(result.starts(with: "OK") ? .green : .red)
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -331,51 +295,6 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-        }
-    }
-
-    private func applyLLMProvider(_ provider: LLMProvider) {
-        switch provider {
-        case .proxy:
-            customEndpointURL = proxyURL
-        case .openrouter:
-            customEndpointURL = ""
-        }
-        // Recompute API key status after provider switch
-        hasApiKey = OpenRouterClient.hasAPIKey()
-    }
-
-    private func testProxyConnection() {
-        guard let url = URL(string: proxyURL) else {
-            proxyTestResult = "Invalid URL"
-            return
-        }
-        proxyTesting = true
-        proxyTestResult = nil
-
-        Task {
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.timeoutInterval = 5
-            let body: [String: Any] = [
-                "model": "anthropic/claude-haiku-4-5",
-                "max_tokens": 1,
-                "messages": [["role": "user", "content": "ping"]],
-            ]
-            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-
-            do {
-                let (_, response) = try await URLSession.shared.data(for: request)
-                if let http = response as? HTTPURLResponse, (200...499).contains(http.statusCode) {
-                    proxyTestResult = "OK - proxy is reachable (HTTP \(http.statusCode))"
-                } else {
-                    proxyTestResult = "Unexpected response"
-                }
-            } catch {
-                proxyTestResult = "Connection failed: \(error.localizedDescription)"
-            }
-            proxyTesting = false
         }
     }
 

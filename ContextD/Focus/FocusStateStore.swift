@@ -76,11 +76,22 @@ struct FocusStatusSnapshot: Sendable {
 }
 
 enum FocusStateStore {
+    private static let logger = DualLogger(category: "FocusStateStore")
     private static let currentStatePath = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".config/autolog/focus-state.json")
     private static let blocksLogPath = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".config/autolog/focus-blocks.jsonl")
     private static let formatter = ISO8601DateFormatter()
+    private static let localTimestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        return formatter
+    }()
+    private static let staleBlockThreshold: TimeInterval = 12 * 60 * 60
+    private static let staleBlockNote =
+        "Auto-closed stale focus block after 12h without an explicit stop."
     private static let browserApps: Set<String> = [
         "Safari", "Google Chrome", "Chrome", "Brave Browser", "Arc", "Firefox",
     ]
@@ -89,8 +100,17 @@ enum FocusStateStore {
     ]
 
     static func loadCurrent() -> AutoLogFocusState? {
-        guard let data = try? Data(contentsOf: currentStatePath) else { return nil }
-        return try? JSONDecoder().decode(AutoLogFocusState.self, from: data)
+        guard let data = try? Data(contentsOf: currentStatePath),
+              let state = try? JSONDecoder().decode(AutoLogFocusState.self, from: data) else {
+            return nil
+        }
+
+        if let staleBlock = staleArchivedBlock(from: state) {
+            archiveStaleCurrentState(staleBlock)
+            return nil
+        }
+
+        return state
     }
 
     static func loadBlocks(limit: Int = 20, includeOpen: Bool = false) -> [AutoLogFocusBlock] {
@@ -212,9 +232,62 @@ enum FocusStateStore {
         return researchKeywords.contains { lower.contains($0) }
     }
 
+    private static func staleArchivedBlock(from state: AutoLogFocusState) -> AutoLogFocusBlock? {
+        guard let startedAt = parseDate(state.startedAt) else { return nil }
+        guard Date().timeIntervalSince(startedAt) > staleBlockThreshold else { return nil }
+
+        let endedAt = formatter.string(from: startedAt.addingTimeInterval(staleBlockThreshold))
+        return AutoLogFocusBlock(
+            id: state.id,
+            task: state.task,
+            taskSlug: state.taskSlug,
+            startedAt: state.startedAt,
+            endedAt: endedAt,
+            doneWhen: state.doneWhen,
+            artifactGoal: state.artifactGoal,
+            artifact: state.artifact,
+            driftBudgetMinutes: state.driftBudgetMinutes,
+            score: nil,
+            notes: staleBlockNote,
+            source: state.source,
+            status: "abandoned"
+        )
+    }
+
+    private static func archiveStaleCurrentState(_ block: AutoLogFocusBlock) {
+        do {
+            let directory = blocksLogPath.deletingLastPathComponent()
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+
+            if !FileManager.default.fileExists(atPath: blocksLogPath.path) {
+                FileManager.default.createFile(atPath: blocksLogPath.path, contents: nil)
+            }
+
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            let data = try encoder.encode(block)
+
+            let handle = try FileHandle(forWritingTo: blocksLogPath)
+            defer { try? handle.close() }
+            handle.seekToEndOfFile()
+            handle.write(data)
+            handle.write(Data("\n".utf8))
+            try FileManager.default.removeItem(at: currentStatePath)
+            logger.warning("Archived stale focus block \(block.id)")
+        } catch {
+            logger.error("Failed to archive stale focus block: \(error.localizedDescription)")
+        }
+    }
+
     static func parseDate(_ value: String?) -> Date? {
         guard let value else { return nil }
         if let date = formatter.date(from: value) {
+            return date
+        }
+        if let date = localTimestampFormatter.date(from: value) {
             return date
         }
         return ISO8601DateFormatter.basic.date(from: value)

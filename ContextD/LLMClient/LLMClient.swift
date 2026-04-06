@@ -92,6 +92,7 @@ extension LLMClient {
 /// Errors from the LLM client.
 enum LLMError: LocalizedError {
     case noAPIKey
+    case cliNotFound
     case invalidResponse
     case httpError(statusCode: Int, body: String)
     case rateLimited(retryAfter: TimeInterval?)
@@ -101,6 +102,8 @@ enum LLMError: LocalizedError {
         switch self {
         case .noAPIKey:
             return "No API key configured. Please add your OpenRouter API key in Settings."
+        case .cliNotFound:
+            return "claude CLI not found. Install Claude Code and run `claude login`."
         case .invalidResponse:
             return "Invalid response from the LLM API."
         case .httpError(let code, let body):
@@ -112,6 +115,49 @@ enum LLMError: LocalizedError {
             return "Rate limited. Please try again later."
         case .networkError(let error):
             return "Network error: \(error.localizedDescription)"
+        }
+    }
+}
+
+// MARK: - Provider
+
+/// Available LLM backend strategies.
+enum LLMProvider: String, CaseIterable, Identifiable {
+    case claude = "claude"
+    case openrouter = "openrouter"
+
+    var id: String { rawValue }
+
+    static var current: LLMProvider {
+        let raw = UserDefaults.standard.string(forKey: "llmProvider") ?? Self.claude.rawValue
+        return LLMProvider(rawValue: raw) ?? .claude
+    }
+
+    func makeClient() -> any LLMClient {
+        switch self {
+        case .claude:
+            return ClaudeShellClient()
+        case .openrouter:
+            return OpenRouterClient()
+        }
+    }
+
+    /// Whether this provider is ready to handle requests right now.
+    var isReady: Bool {
+        switch self {
+        case .claude:
+            return ClaudeShellClient.isAvailable()
+        case .openrouter:
+            return OpenRouterClient.hasAPIKey()
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .claude:
+            return "Claude (direct)"
+        case .openrouter:
+            return "OpenRouter API"
         }
     }
 }

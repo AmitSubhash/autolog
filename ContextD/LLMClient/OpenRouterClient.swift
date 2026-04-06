@@ -3,23 +3,7 @@ import Foundation
 /// OpenRouter API client. Hand-rolled using URLSession.
 /// Supports any model available on OpenRouter via the /api/v1/chat/completions endpoint.
 final class OpenRouterClient: LLMClient, Sendable {
-    /// LLM endpoint URL. Configurable via UserDefaults "llmEndpointURL" to point
-    /// at a local claude -p proxy instead of OpenRouter.
-    private static var endpoint: URL {
-        if let custom = UserDefaults.standard.string(forKey: "llmEndpointURL"),
-           let url = URL(string: custom) {
-            return url
-        }
-        return URL(string: "https://openrouter.ai/api/v1/chat/completions")!
-    }
-
-    /// True when using a local proxy (no API key needed).
-    static var isUsingProxy: Bool {
-        if let custom = UserDefaults.standard.string(forKey: "llmEndpointURL"), !custom.isEmpty {
-            return true
-        }
-        return false
-    }
+    private static let endpoint = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
 
     private let logger = DualLogger(category: "OpenRouterClient")
 
@@ -43,10 +27,8 @@ final class OpenRouterClient: LLMClient, Sendable {
         )
     }
 
-    /// Check whether an API key is available (file or proxy).
-    /// Returns true in proxy mode (no key needed).
+    /// Check whether an API key is available.
     static func hasAPIKey() -> Bool {
-        if isUsingProxy { return true }
         return KeychainHelper.exists(key: apiKeyFile)
     }
 
@@ -85,9 +67,7 @@ final class OpenRouterClient: LLMClient, Sendable {
         temperature: Double,
         responseFormat: String?
     ) async throws -> LLMResponse {
-        // When using a local proxy (claude -p), no API key is needed.
-        // Skip keychain access entirely for proxy mode to avoid macOS prompt.
-        let apiKey: String? = Self.isUsingProxy ? "" : Self.readAPIKey()
+        let apiKey: String? = Self.readAPIKey()
         guard let apiKey else {
             throw LLMError.noAPIKey
         }

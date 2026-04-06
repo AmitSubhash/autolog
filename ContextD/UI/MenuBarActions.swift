@@ -3,7 +3,7 @@ import SwiftUI
 
 // MARK: - Actions
 
-/// Clean action buttons for pause, enrichment, debug, and activity graph.
+/// Clean action buttons for pause, enrichment, debug, graph, and settings.
 struct ActionsView: View {
     @ObservedObject var captureEngine: CaptureEngine
     var onOpenEnrichment: () -> Void
@@ -54,6 +54,15 @@ struct ActionsView: View {
                 if let url = URL(string: "obsidian://open?vault=autolog-vault&view=graph") {
                     NSWorkspace.shared.open(url)
                 }
+            }
+
+            MenuActionButton(
+                title: "Settings",
+                icon: "gear",
+                shortcut: ",",
+                modifiers: "Cmd"
+            ) {
+                SettingsWindowController.shared.show()
             }
         }
     }
@@ -107,6 +116,36 @@ struct MenuActionButton: View {
 
 // MARK: - Quit Button
 
+/// Manages the Settings window as a standalone NSWindow for LSUIElement apps.
+@MainActor
+final class SettingsWindowController {
+    static let shared = SettingsWindowController()
+    private var window: NSWindow?
+
+    func show() {
+        if let window, window.isVisible {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let settingsView = SettingsView()
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 580, height: 500),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "AutoLog Settings"
+        window.contentView = NSHostingView(rootView: settingsView)
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        self.window = window
+    }
+}
+
 /// Quit action at the bottom of the panel.
 struct QuitButton: View {
     @State private var isHovered = false
@@ -121,7 +160,7 @@ struct QuitButton: View {
                     .foregroundStyle(isHovered ? .primary : .secondary)
                     .frame(width: 16, alignment: .center)
 
-                Text("Quit autolog")
+                Text("Quit AutoLog")
                     .font(.system(size: 13))
 
                 Spacer()

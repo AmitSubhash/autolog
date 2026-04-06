@@ -1,8 +1,8 @@
 import Foundation
 
-/// Controls summarization backend. All modes route through claude -p proxy.
+/// Controls summarization backend.
 enum SummarizationMode: String, CaseIterable, Sendable {
-    /// Standard cloud summarization via claude -p proxy with Haiku.
+    /// Standard cloud summarization.
     case cloud
     /// Reserved for future local-only mode.
     case local
@@ -30,19 +30,19 @@ actor SummarizationEngine {
     private let llmClient: LLMClient
     private let logger = DualLogger(category: "Summarization")
 
-    /// Active summarization mode. Defaults to .cloud (uses claude -p proxy).
+    /// Active summarization mode. Defaults to .cloud.
     var mode: SummarizationMode = .cloud
 
     /// How often to check for unsummarized captures (seconds).
     var pollInterval: TimeInterval = 60
 
     /// Minimum age of captures before summarizing (seconds).
-    /// 5 min balances freshness with having enough context per chunk.
-    var minimumAge: TimeInterval = 300 // 5 minutes
+    /// 1 min gives much faster feedback and matches the NeuraMind fork.
+    var minimumAge: TimeInterval = 60 // 1 minute
 
     /// Duration of each summarization time window (seconds).
-    /// 5 min chunks for faster feedback. Cost ~$0.002/call, ~12 calls/hour.
-    var chunkDuration: TimeInterval = 300 // 5 minutes
+    /// 1 min chunks keep summaries fresher and more specific.
+    var chunkDuration: TimeInterval = 60 // 1 minute
 
     /// Minimum sub-chunk duration when splitting at app boundaries (seconds).
     /// 60s prevents micro-summaries from rapid app switching.
@@ -185,9 +185,9 @@ actor SummarizationEngine {
         }
     }
 
-    // MARK: - Cloud Summarization (via claude -p proxy)
+    // MARK: - Cloud Summarization
 
-    /// Summarize a chunk using the LLM (claude -p proxy with Haiku).
+    /// Summarize a chunk using the configured LLM backend.
     private func summarizeChunkCloud(_ chunk: Chunker.Chunk) async throws {
         var ocrSamples = CaptureFormatter.formatHierarchical(
             captures: chunk.captures,
@@ -242,7 +242,11 @@ actor SummarizationEngine {
             ]
         )
 
-        let systemPrompt = PromptTemplates.template(for: .summarizationSystem)
+        var systemPrompt = PromptTemplates.template(for: .summarizationSystem)
+        if let focusTask = FocusStateStore.loadCurrent()?.task, !focusTask.isEmpty {
+            systemPrompt += "\n\nThe user is currently working on: \"\(focusTask)\". "
+                + "When relevant, relate the observed activity to this task."
+        }
 
         let llmResponse = try await llmClient.completeWithUsage(
             messages: [LLMMessage(role: "user", content: userPrompt)],

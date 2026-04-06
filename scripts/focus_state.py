@@ -20,6 +20,8 @@ FOCUS_DIR = Path.home() / ".config" / "autolog"
 CURRENT_STATE_PATH = FOCUS_DIR / "focus-state.json"
 BLOCKS_LOG_PATH = FOCUS_DIR / "focus-blocks.jsonl"
 DEFAULT_SCORECARD_PATH = Path.home() / "org" / "autolog-scorecard.org"
+STALE_BLOCK_THRESHOLD = timedelta(hours=12)
+STALE_BLOCK_NOTE = "Auto-closed stale focus block after 12h without an explicit stop."
 
 
 def _ensure_focus_dir() -> None:
@@ -67,7 +69,42 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def load_current_focus_state() -> dict[str, Any] | None:
     """Read the current focus state from disk."""
-    return _read_json(CURRENT_STATE_PATH)
+    current = _read_json(CURRENT_STATE_PATH)
+    if not current:
+        return None
+    if _archive_stale_focus_state(current):
+        return None
+    return current
+
+
+def _archive_stale_focus_state(current: dict[str, Any]) -> bool:
+    """Archive and clear a stale open block.
+
+    Returns
+    -------
+    bool
+        True when the current block was stale and has been archived.
+    """
+    started_at = _parse_iso(current.get("started_at"))
+    if not started_at:
+        return False
+    if datetime.now() - started_at <= STALE_BLOCK_THRESHOLD:
+        return False
+
+    ended = dict(current)
+    ended["ended_at"] = (started_at + STALE_BLOCK_THRESHOLD).replace(microsecond=0).isoformat()
+    ended["status"] = "abandoned"
+    ended["notes"] = STALE_BLOCK_NOTE
+
+    _ensure_focus_dir()
+    with BLOCKS_LOG_PATH.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(ended, sort_keys=True) + "\n")
+
+    try:
+        CURRENT_STATE_PATH.unlink()
+    except OSError:
+        pass
+    return True
 
 
 def load_focus_blocks(include_open: bool = False) -> list[dict[str, Any]]:

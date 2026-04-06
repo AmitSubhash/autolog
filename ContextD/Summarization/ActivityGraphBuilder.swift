@@ -103,10 +103,15 @@ enum ActivityGraphBuilder {
         logger: DualLogger
     ) -> [RawActivityGroup] {
         let cleaned = RetrievalPipeline.stripCodeFences(response)
-        guard let data = cleaned.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let activities = json["activities"] as? [[String: Any]] else {
-            logger.warning("Failed to parse activity inference response as JSON")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let activities = extractActivitiesPayload(from: cleaned) else {
+            let firstChar = cleaned.first.map(String.init) ?? "none"
+            logger.warning(
+                "Failed to parse activity inference response as JSON "
+                    + "(chars=\(cleaned.count), first_char=\(firstChar), "
+                    + "has_activities_key=\(cleaned.contains("\"activities\"")))"
+            )
             return []
         }
 
@@ -121,6 +126,93 @@ enum ActivityGraphBuilder {
                 confidence: dict["confidence"] as? Double ?? 0.8
             )
         }
+    }
+
+    private static func extractActivitiesPayload(from text: String) -> [[String: Any]]? {
+        if let root = parseJSONObject(text),
+           let activities = root["activities"] as? [[String: Any]] {
+            return activities
+        }
+
+        if let array = parseJSONArray(text) {
+            return array
+        }
+
+        for candidate in extractJSONObjectCandidates(from: text) {
+            if let root = parseJSONObject(candidate),
+               let activities = root["activities"] as? [[String: Any]] {
+                return activities
+            }
+        }
+
+        return nil
+    }
+
+    private static func parseJSONObject(_ text: String) -> [String: Any]? {
+        guard let data = text.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        return json
+    }
+
+    private static func parseJSONArray(_ text: String) -> [[String: Any]]? {
+        guard let data = text.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return nil
+        }
+        return json
+    }
+
+    private static func extractJSONObjectCandidates(from text: String) -> [String] {
+        var candidates: [String] = []
+        var depth = 0
+        var startIndex: String.Index?
+        var inString = false
+        var escape = false
+
+        for index in text.indices {
+            let char = text[index]
+
+            if inString {
+                if escape {
+                    escape = false
+                    continue
+                }
+                if char == "\\" {
+                    escape = true
+                    continue
+                }
+                if char == "\"" {
+                    inString = false
+                }
+                continue
+            }
+
+            if char == "\"" {
+                inString = true
+                continue
+            }
+
+            if char == "{" {
+                if depth == 0 {
+                    startIndex = index
+                }
+                depth += 1
+                continue
+            }
+
+            if char == "}" {
+                guard depth > 0 else { continue }
+                depth -= 1
+                if depth == 0, let candidateStart = startIndex {
+                    candidates.append(String(text[candidateStart...index]))
+                    startIndex = nil
+                }
+            }
+        }
+
+        return candidates
     }
 
     // MARK: - Prompt Formatting
