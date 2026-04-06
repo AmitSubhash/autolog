@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 // MARK: - AppDelegate
@@ -231,6 +232,9 @@ private struct AutoLogSidePanelView: View {
     @State private var focusState: AutoLogFocusState?
     @State private var focusDrift: FocusDriftMetrics?
 
+    // Refresh timer fires every 5 seconds to keep stats current
+    private let refreshTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
+
     var body: some View {
         if #available(macOS 26, *) {
             GlassEffectContainer(spacing: 0) {
@@ -239,11 +243,13 @@ private struct AutoLogSidePanelView: View {
             .padding(14)
             .frame(width: 340)
             .onAppear { snapshotState() }
+            .onReceive(refreshTimer) { _ in snapshotState() }
         } else {
             panelCards
                 .padding(14)
                 .frame(width: 340)
                 .onAppear { snapshotState() }
+                .onReceive(refreshTimer) { _ in snapshotState() }
         }
     }
 
