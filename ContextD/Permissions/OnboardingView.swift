@@ -9,6 +9,7 @@ struct OnboardingView: View {
     enum Step { case permissions, llmSetup }
 
     @State private var step: Step = .permissions
+    @State private var didAutoRequestScreenRecording = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -47,6 +48,15 @@ struct OnboardingView: View {
 
             VStack(spacing: 16) {
                 PermissionRow(
+                    icon: "display",
+                    title: "Screen Recording",
+                    description: "Allow AutoLog to capture your screen and build summaries.",
+                    isGranted: permissionManager.screenRecordingGranted,
+                    onRequest: { permissionManager.requestScreenRecording() },
+                    onOpenSettings: { permissionManager.openScreenRecordingSettings() }
+                )
+
+                PermissionRow(
                     icon: "accessibility",
                     title: "Accessibility",
                     description: "Read focused window titles and app information.",
@@ -71,30 +81,35 @@ struct OnboardingView: View {
             }
 
             if !permissionManager.allPermissionsGranted {
-                Text("Permissions may show as not granted after toggling. If you've enabled them in System Settings, click Next to continue.")
+                Text("If you just granted permissions, click Refresh Status. You can continue after both are enabled.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
         }
+        .onAppear {
+            guard !permissionManager.screenRecordingGranted, !didAutoRequestScreenRecording else {
+                return
+            }
+            didAutoRequestScreenRecording = true
+            permissionManager.requestScreenRecording()
+        }
     }
 
     // MARK: - Step 2: LLM Setup
 
-    @State private var selectedProvider: SettingsView.LLMProvider = .proxy
-    @AppStorage("llmEndpointURL") private var customEndpointURL: String = ""
-    @State private var proxyURL: String = "http://127.0.0.1:11434/v1/chat/completions"
+    @State private var selectedProvider: LLMProvider = .claude
+    @AppStorage("llmProvider") private var llmProviderRawValue: String = LLMProvider.claude.rawValue
+    @State private var claudeAvailable: Bool = false
     @State private var apiKey: String = ""
-    @State private var proxyTestResult: String?
-    @State private var proxyTesting: Bool = false
     @State private var showApiKeySaved: Bool = false
     @State private var hasApiKey: Bool = false
     @State private var saveError: String?
 
     private var llmConfigured: Bool {
         switch selectedProvider {
-        case .proxy:
-            return !proxyURL.isEmpty
+        case .claude:
+            return claudeAvailable
         case .openrouter:
             return hasApiKey
         }
@@ -120,37 +135,23 @@ struct OnboardingView: View {
             Divider()
 
             Picker("Provider:", selection: $selectedProvider) {
-                ForEach(SettingsView.LLMProvider.allCases) { provider in
-                    Text(provider.rawValue).tag(provider)
+                ForEach(LLMProvider.allCases) { provider in
+                    Text(provider.displayName).tag(provider)
                 }
             }
             .pickerStyle(.segmented)
 
-            if selectedProvider == .proxy {
+            if selectedProvider == .claude {
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        TextField("Proxy URL", text: $proxyURL)
-                            .textFieldStyle(.roundedBorder)
-
-                        Button(proxyTesting ? "Testing..." : "Test") {
-                            testProxy()
-                        }
-                        .disabled(proxyURL.isEmpty || proxyTesting)
+                    HStack(spacing: 8) {
+                        Image(systemName: claudeAvailable ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(claudeAvailable ? .green : .red)
+                        Text(claudeAvailable ? "Claude CLI is available" : "Claude CLI not found")
+                            .font(.caption)
                     }
-
-                    Text("Run `claude -p` in a terminal to start the proxy.")
+                    Text("AutoLog can use your Claude Code session directly. No local proxy needed.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-
-                    if let result = proxyTestResult {
-                        HStack {
-                            Image(systemName: result.starts(with: "OK") ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .foregroundStyle(result.starts(with: "OK") ? .green : .red)
-                            Text(result)
-                                .font(.caption)
-                                .foregroundStyle(result.starts(with: "OK") ? .green : .red)
-                        }
-                    }
                 }
             } else {
                 VStack(alignment: .leading, spacing: 8) {
@@ -207,51 +208,14 @@ struct OnboardingView: View {
                 .foregroundStyle(.secondary)
         }
         .onAppear {
+            claudeAvailable = ClaudeShellClient.isAvailable()
             hasApiKey = OpenRouterClient.hasAPIKey()
+            selectedProvider = LLMProvider(rawValue: llmProviderRawValue) ?? .claude
         }
     }
 
     private func applyProvider() {
-        switch selectedProvider {
-        case .proxy:
-            customEndpointURL = proxyURL
-        case .openrouter:
-            customEndpointURL = ""
-        }
-    }
-
-    private func testProxy() {
-        guard let url = URL(string: proxyURL) else {
-            proxyTestResult = "Invalid URL"
-            return
-        }
-        proxyTesting = true
-        proxyTestResult = nil
-
-        Task {
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.timeoutInterval = 5
-            let body: [String: Any] = [
-                "model": "anthropic/claude-haiku-4-5",
-                "max_tokens": 1,
-                "messages": [["role": "user", "content": "ping"]],
-            ]
-            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
-
-            do {
-                let (_, response) = try await URLSession.shared.data(for: request)
-                if let http = response as? HTTPURLResponse, (200...499).contains(http.statusCode) {
-                    proxyTestResult = "OK - proxy is reachable (HTTP \(http.statusCode))"
-                } else {
-                    proxyTestResult = "Unexpected response"
-                }
-            } catch {
-                proxyTestResult = "Connection failed: \(error.localizedDescription)"
-            }
-            proxyTesting = false
-        }
+        llmProviderRawValue = selectedProvider.rawValue
     }
 
     private func saveKey() {

@@ -271,9 +271,9 @@ final class CaptureEngine: ObservableObject {
 
     /// Perform a single capture cycle.
     ///
-    /// Note: No screen-sharing check is needed here. CGDisplayCreateImage is
-    /// a read-only API that coexists with Zoom/Teams/FaceTime screen sharing
-    /// without interference. See ScreenCapture.swift for details.
+    /// Note: No screen-sharing check is needed here. The `screencapture` CLI
+    /// coexists with Zoom/Teams/FaceTime screen sharing without interference.
+    /// See ScreenCapture.swift for details.
     private func performCapture() async {
         // Belt-and-suspenders guard: do not capture during sleep/lock
         // even if the loop check was somehow bypassed.
@@ -302,6 +302,7 @@ final class CaptureEngine: ObservableObject {
 
             // Step 2: Capture screenshot (async, via system screencapture CLI)
             guard let image = try await screenCapture.captureMainDisplay() else {
+                lastError = "Screen capture failed. Re-grant Screen Recording for AutoLog in System Settings."
                 logger.warning("Screenshot capture returned nil")
                 return
             }

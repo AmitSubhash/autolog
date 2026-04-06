@@ -12,7 +12,7 @@ final class ServiceContainer {
     // Core services
     let database: AppDatabase?
     let storageManager: StorageManager?
-    let llmClient: OpenRouterClient
+    let llmClient: any LLMClient
     let captureEngine: CaptureEngine?
     let sessionDetector: AppSessionDetector?
     let enrichmentEngine: EnrichmentEngine?
@@ -25,7 +25,7 @@ final class ServiceContainer {
     private(set) var apiServer: APIServer?
 
     private init() {
-        llmClient = OpenRouterClient()
+        llmClient = LLMProvider.current.makeClient()
 
         let logFile = "/tmp/autolog-debug.log"
         func debugLog(_ msg: String) {
@@ -85,9 +85,9 @@ final class ServiceContainer {
 
     /// Start capture + summarization. Call once after permissions are confirmed.
     func startServices() {
-        // On macOS 15+, CGPreflightScreenCaptureAccess() can return false even after
-        // the user grants permission until the app is restarted. We proceed anyway and
-        // let individual capture calls fail gracefully if permissions are truly missing.
+        // We use the system screencapture CLI which is pre-authorized, so screen
+        // recording permission is always reported as granted. Accessibility may lag
+        // on macOS 15+ after re-codesign. We proceed and let calls fail gracefully.
         if !PermissionManager.shared.allPermissionsGranted {
             logger.warning("Permissions may not be fully detected yet - starting services anyway")
         }
@@ -138,13 +138,12 @@ final class ServiceContainer {
             if maxDText > 0 { strategy.maxDeltaTextLength = maxDText }
         }
 
-        let hasAPIKey = OpenRouterClient.hasAPIKey()
-        let usingProxy = OpenRouterClient.isUsingProxy
+        let provider = LLMProvider.current
         let sumMode = SummarizationMode.current
-        logger.info("API key present: \(hasAPIKey), proxy: \(usingProxy), mode: \(sumMode.rawValue)")
-
-        // When using a local claude -p proxy, no API key is needed.
-        let canSummarize = usingProxy || hasAPIKey
+        let canSummarize = provider.isReady
+        logger.info(
+            "LLM provider: \(provider.rawValue), ready: \(canSummarize), mode: \(sumMode.rawValue)"
+        )
 
         if canSummarize {
             if let engine = summarizationEngine {
@@ -175,7 +174,9 @@ final class ServiceContainer {
                 logger.error("summarizationEngine is nil -- cannot start summarization")
             }
         } else {
-            logger.warning("No API key found and mode is \(sumMode.rawValue) -- summarization disabled")
+            logger.warning(
+                "LLM provider \(provider.rawValue) is not ready and mode is \(sumMode.rawValue) -- summarization disabled"
+            )
         }
 
         // Start activity inference engine (requires LLM access, same as summarization)
