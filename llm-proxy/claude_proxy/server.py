@@ -4,12 +4,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import shutil
 import signal
 import sys
 import threading
 import time
 import uuid
+from difflib import SequenceMatcher
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
@@ -34,11 +36,64 @@ MODEL_MAP: dict[str, str] = {
     "anthropic/claude-opus-4-5": "opus",
 }
 
+# Volatile OCR patterns to strip before similarity comparison
+_VOLATILE_RE = re.compile(
+    r"""
+    \d{1,2}:\d{2}(?::\d{2})?          # timestamps like 18:49:18 or 6:49
+    | \b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b  # day names
+    | \d{4}-\d{2}-\d{2}               # ISO dates
+    """,
+    re.VERBOSE,
+)
+
+SIMILARITY_THRESHOLD = 0.92  # skip if >92% similar to last request
+
+
+class SimilarityDedup:
+    """Skip near-identical requests by comparing against previous content per model."""
+
+    def __init__(self, threshold: float = SIMILARITY_THRESHOLD) -> None:
+        self._threshold = threshold
+        self._last: dict[str, tuple[str, dict[str, Any]]] = {}  # model -> (text, response)
+        self._lock = threading.Lock()
+        self.skips = 0
+
+    @staticmethod
+    def _normalize(text: str) -> str:
+        """Strip volatile elements (timestamps, dates) for stable comparison."""
+        return _VOLATILE_RE.sub("", text)
+
+    def check(self, model: str, user_text: str) -> dict[str, Any] | None:
+        """Return cached response if user_text is similar enough to last request."""
+        normalized = self._normalize(user_text)
+        with self._lock:
+            prev = self._last.get(model)
+            if prev is None:
+                return None
+            prev_text, prev_response = prev
+            ratio = SequenceMatcher(None, prev_text, normalized, autojunk=True).quick_ratio()
+            if ratio >= self._threshold:
+                self.skips += 1
+                logger.info(
+                    "Similarity dedup: %.1f%% similar to last %s request (skip #%d)",
+                    ratio * 100, model, self.skips,
+                )
+                return prev_response
+            return None
+
+    def record(self, model: str, user_text: str, response: dict[str, Any]) -> None:
+        """Store the latest request/response for future comparison."""
+        normalized = self._normalize(user_text)
+        with self._lock:
+            self._last[model] = (normalized, response)
+
+
 # Singletons initialized in main()
 _loop: asyncio.AbstractEventLoop | None = None
 _cache: ResponseCache | None = None
 _tracker: UsageTracker | None = None
 _dispatcher: PriorityDispatcher | None = None
+_dedup: SimilarityDedup | None = None
 _start_time: float = 0.0
 
 
@@ -165,11 +220,12 @@ class ProxyHandler(BaseHTTPRequestHandler):
         if self.path == "/health":
             self._json({"status": "ok"}, HTTPStatus.OK)
         elif self.path == "/stats":
-            assert _cache is not None and _tracker is not None
+            assert _cache is not None and _tracker is not None and _dedup is not None
             self._json({
                 "today": _tracker.today_stats(),
                 "cache_hits": _cache.hits,
                 "cache_size": _cache.size,
+                "similarity_skips": _dedup.skips,
                 "uptime_seconds": round(time.monotonic() - _start_time, 1),
             }, HTTPStatus.OK)
         else:
@@ -203,7 +259,14 @@ class ProxyHandler(BaseHTTPRequestHandler):
             )
             return
 
-        # Check cache
+        # Check similarity dedup (catches near-identical OCR payloads)
+        assert _dedup is not None
+        deduped = _dedup.check(model_alias, user_text)
+        if deduped is not None:
+            self._json(deduped, HTTPStatus.OK)
+            return
+
+        # Check exact cache
         assert _cache is not None
         cached = _cache.get(model_alias, system_prompt, user_text)
         if cached is not None:
@@ -236,6 +299,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
         text = result.get("result", "")
         response = _build_response(model_name, text, (system_prompt or "") + "\n" + user_text)
         _cache.put(model_alias, system_prompt, user_text, response)
+        _dedup.record(model_alias, user_text, response)
         assert _tracker is not None
         _tracker.record(response["usage"]["total_tokens"])
         self._json(response, HTTPStatus.OK)
@@ -253,7 +317,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
 def main(port: int = DEFAULT_PORT) -> None:
     """Start the proxy server on ``HOST:port``."""
-    global _loop, _cache, _tracker, _dispatcher, _start_time  # noqa: PLW0603
+    global _loop, _cache, _tracker, _dispatcher, _dedup, _start_time  # noqa: PLW0603
     claude_path = shutil.which("claude")
     if claude_path:
         logger.info("Found claude CLI at: %s", claude_path)
@@ -262,6 +326,7 @@ def main(port: int = DEFAULT_PORT) -> None:
     _start_time = time.monotonic()
     _cache = ResponseCache()
     _tracker = UsageTracker()
+    _dedup = SimilarityDedup()
     _loop = asyncio.new_event_loop()
     _dispatcher = PriorityDispatcher(max_concurrent=MAX_CONCURRENT)
 

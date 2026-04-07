@@ -14,7 +14,7 @@ struct SettingsView: View {
         static let maxKeyframeInterval: Double = 60
         static let keyframeChangeThreshold: Double = 0.50
         static let chunkDuration: Double = 60
-        static let pollInterval: Double = 60
+        static let pollInterval: Double = 300
         static let minAge: Double = 60
         static let apiServerEnabled = true
         static let apiServerPort = 21890
