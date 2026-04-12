@@ -19,6 +19,7 @@ actor AppSessionDetector {
     struct InProgressSession {
         let appName: String
         let appBundleID: String?
+        let focusBlockId: String?
         var startTimestamp: Double
         var endTimestamp: Double
         var captureCount: Int
@@ -38,11 +39,12 @@ actor AppSessionDetector {
         let isSameApp = bothHaveBundleID
             ? current?.appBundleID == record.appBundleID
             : current?.appName == record.appName
+        let isSameFocusBlock = current?.focusBlockId == record.focusBlockId
         // Use abs() to handle clock skew (negative gap after sleep/wake)
         let gap = current.map { abs(record.timestamp - $0.endTimestamp) } ?? .infinity
 
         // Same app and brief gap: extend current session
-        if isSameApp && gap < sessionGapTolerance {
+        if isSameApp && isSameFocusBlock && gap < sessionGapTolerance {
             extendCurrent(with: record)
             return
         }
@@ -110,6 +112,7 @@ actor AppSessionDetector {
             windowTitles: windowTitlesJSON,
             documentPaths: documentPathsJSON,
             browserURLs: browserURLsJSON,
+            focusBlockId: session.focusBlockId,
             activityId: nil,
             activityInferred: false
         )
@@ -140,6 +143,7 @@ actor AppSessionDetector {
         current = InProgressSession(
             appName: record.appName,
             appBundleID: record.appBundleID,
+            focusBlockId: record.focusBlockId,
             startTimestamp: record.timestamp,
             endTimestamp: record.timestamp,
             captureCount: 1,

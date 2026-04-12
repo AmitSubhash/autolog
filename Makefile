@@ -7,7 +7,7 @@ BUNDLE_ID   := com.autolog.app
 BUILD_DIR   := .build
 DEBUG_BIN   := $(BUILD_DIR)/debug/$(PRODUCT)
 RELEASE_BIN := $(BUILD_DIR)/release/$(PRODUCT)
-APP_BUNDLE  := $(BUILD_DIR)/$(PRODUCT).app
+APP_BUNDLE  := $(BUILD_DIR)/AutoLog.app
 DB_PATH     := $(HOME)/Library/Application Support/ContextD/contextd.sqlite
 
 # Colors
@@ -17,7 +17,7 @@ RED    := \033[0;31m
 CYAN   := \033[0;36m
 RESET  := \033[0m
 
-.PHONY: help build release run clean resolve lint test benchmark db-shell db-stats db-recent db-search \
+.PHONY: help build release run run-bin clean resolve lint test benchmark db-shell db-stats db-recent db-search \
         db-keyframes reset-permissions reset-db logs install install-app uninstall check-permissions watch
 
 # ─────────────────────────────────────────
@@ -59,8 +59,11 @@ clean: ## Remove build artifacts
 #  Run
 # ─────────────────────────────────────────
 
-run: build ## Build and run (debug)
-	@echo "$(CYAN)Running ContextD...$(RESET)"
+run: run-bundle ## Build and run the bundled app (preferred)
+
+run-bin: build ## Build and run the raw debug binary (permission/debug edge cases possible)
+	@echo "$(CYAN)Running raw ContextD binary...$(RESET)"
+	@echo "$(YELLOW)Prefer 'make run' or 'make install-app' for permission testing.$(RESET)"
 	@echo "$(YELLOW)Press Ctrl+C to stop$(RESET)"
 	@$(DEBUG_BIN)
 
@@ -302,11 +305,14 @@ bundle: build ## Create a .app bundle (needed for proper permission prompts)
 		cp Resources/contextd.icns "$(APP_BUNDLE)/Contents/Resources/autolog.icns"; \
 		echo "  $(GREEN)Icon installed$(RESET)"; \
 	fi
+	@if [ -f Resources/autolog-launch-agent.sh ]; then \
+		cp Resources/autolog-launch-agent.sh "$(APP_BUNDLE)/Contents/Resources/autolog-launch-agent.sh"; \
+		chmod 755 "$(APP_BUNDLE)/Contents/Resources/autolog-launch-agent.sh"; \
+	fi
 	@if security find-identity -v -p codesigning 2>/dev/null | grep -q "ContextD Dev"; then \
 		codesign --force --deep --sign "ContextD Dev" \
-			--entitlements Resources/ContextD.entitlements \
 			"$(APP_BUNDLE)" 2>/dev/null; \
-		echo "  $(GREEN)Signed with ContextD Dev + entitlements$(RESET)"; \
+		echo "  $(GREEN)Signed with ContextD Dev$(RESET)"; \
 	fi
 	@echo "$(GREEN)App bundle created: $(APP_BUNDLE)$(RESET)"
 	@echo "Run with: open $(APP_BUNDLE)"
@@ -332,14 +338,23 @@ install-app: bundle ## Build, sign, and install to /Applications/AutoLog.app
 	@sleep 1
 	@mkdir -p "$(INSTALLED_APP)"
 	@rsync -a --delete "$(APP_BUNDLE)/" "$(INSTALLED_APP)/"
+	@xattr -cr "$(INSTALLED_APP)" 2>/dev/null || true
+	@codesign --remove-signature "$(INSTALLED_APP)" 2>/dev/null || true
 	@if security find-identity -v -p codesigning 2>/dev/null | grep -q "ContextD Dev"; then \
 		codesign --force --deep --sign "ContextD Dev" \
-			--entitlements Resources/ContextD.entitlements \
 			"$(INSTALLED_APP)" 2>/dev/null && \
 		echo "  $(GREEN)Signed with ContextD Dev$(RESET)"; \
 	else \
 		codesign --force --deep --sign - "$(INSTALLED_APP)" 2>/dev/null && \
 		echo "  $(YELLOW)Ad-hoc signed (no ContextD Dev cert found)$(RESET)"; \
+	fi
+	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$(INSTALLED_APP)" >/dev/null 2>&1 || true
+	@if [ -f "$$HOME/Library/LaunchAgents/com.autolog.app.plist" ]; then \
+		echo "  $(CYAN)Refreshing installed launch agent$(RESET)"; \
+		cp launchd/com.autolog.app.plist "$$HOME/Library/LaunchAgents/com.autolog.app.plist"; \
+		launchctl bootout "gui/$$(id -u)" "$$HOME/Library/LaunchAgents/com.autolog.app.plist" 2>/dev/null || true; \
+		launchctl bootstrap "gui/$$(id -u)" "$$HOME/Library/LaunchAgents/com.autolog.app.plist"; \
+		launchctl kickstart -k "gui/$$(id -u)/com.autolog.app" 2>/dev/null || true; \
 	fi
 	@echo "$(GREEN)Installed. Launching...$(RESET)"
 	@open "$(INSTALLED_APP)"

@@ -10,7 +10,6 @@ struct AutoLogFocusState: Codable, Sendable {
     let artifact: String?
     let driftBudgetMinutes: Int?
     let source: String?
-    let scorecardPath: String?
     let status: String?
 
     enum CodingKeys: String, CodingKey {
@@ -20,7 +19,6 @@ struct AutoLogFocusState: Codable, Sendable {
         case doneWhen = "done_when"
         case artifactGoal = "artifact_goal"
         case driftBudgetMinutes = "drift_budget_minutes"
-        case scorecardPath = "scorecard_path"
     }
 }
 
@@ -36,6 +34,7 @@ struct AutoLogFocusBlock: Codable, Sendable {
     let driftBudgetMinutes: Int?
     let score: Int?
     let notes: String?
+    let nextStep: String?
     let source: String?
     let status: String?
 
@@ -47,6 +46,7 @@ struct AutoLogFocusBlock: Codable, Sendable {
         case doneWhen = "done_when"
         case artifactGoal = "artifact_goal"
         case driftBudgetMinutes = "drift_budget_minutes"
+        case nextStep = "next_step"
     }
 }
 
@@ -129,6 +129,7 @@ enum FocusStateStore {
                     driftBudgetMinutes: current.driftBudgetMinutes,
                     score: nil,
                     notes: nil,
+                    nextStep: nil,
                     source: current.source,
                     status: current.status ?? "active"
                 ),
@@ -143,6 +144,37 @@ enum FocusStateStore {
         let recent = loadBlocks(limit: 8, includeOpen: false)
         let drift = computeDrift(current: current, storageManager: storageManager)
         return FocusStatusSnapshot(current: current, drift: drift, recentBlocks: recent)
+    }
+
+    static func block(withId id: String) -> AutoLogFocusBlock? {
+        loadBlocks(limit: 500, includeOpen: true).first { $0.id == id }
+    }
+
+    static func block(at date: Date) -> AutoLogFocusBlock? {
+        loadBlocks(limit: 500, includeOpen: true).first { block in
+            guard let start = parseDate(block.startedAt) else { return false }
+            let end = parseDate(block.endedAt) ?? Date.distantFuture
+            return start <= date && end >= date
+        }
+    }
+
+    static func bestMatchingBlock(start: Date, end: Date) -> AutoLogFocusBlock? {
+        var bestBlock: AutoLogFocusBlock?
+        var bestOverlap: TimeInterval = 0
+
+        for block in loadBlocks(limit: 500, includeOpen: true) {
+            guard let blockStart = parseDate(block.startedAt) else { continue }
+            let blockEnd = parseDate(block.endedAt) ?? Date()
+            let overlapStart = max(start, blockStart)
+            let overlapEnd = min(end, blockEnd)
+            let overlap = overlapEnd.timeIntervalSince(overlapStart)
+            if overlap > bestOverlap {
+                bestOverlap = overlap
+                bestBlock = block
+            }
+        }
+
+        return bestOverlap > 0 ? bestBlock : nil
     }
 
     private static func readLoggedBlocks(limit: Int) -> [AutoLogFocusBlock] {
@@ -249,6 +281,7 @@ enum FocusStateStore {
             driftBudgetMinutes: state.driftBudgetMinutes,
             score: nil,
             notes: staleBlockNote,
+            nextStep: nil,
             source: state.source,
             status: "abandoned"
         )

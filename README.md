@@ -58,16 +58,25 @@ AutoLog can also track declared focus blocks, not just passive activity. The mod
 
 This creates a useful separation: planning lives in Org, but productivity and drift are judged from captured behavior.
 
+AutoLog now binds focus blocks directly into runtime data:
+
+- captures record the active `focus_block_id`
+- app sessions split when the focus block changes
+- summaries and inferred activities carry `focus_block_id`
+- summaries and activities also carry `focus_alignment` (`on_task`, `task_adjacent`, `off_task`, `recovered`)
+- study-oriented summaries and activities carry `study_coverage` (resource, sections, concepts)
+
+That means newer focus blocks are linked directly in the database, while older blocks still fall back to time-overlap matching for reports and vault sync.
+
 ### File contract
 
 Focus blocks are stored as small local files:
 
 - `~/.config/autolog/focus-state.json` -- the current active block
 - `~/.config/autolog/focus-blocks.jsonl` -- completed/interrupted block history
-- `~/org/today.org` -- daily dashboard
-- `~/org/autolog-scorecard.org` -- review log
+- `~/org/today.org` -- lightweight todo list + warm-start note
 
-When you start a block, Emacs writes the declared task, done condition, artifact goal, and drift budget. When you stop a block, AutoLog appends the finalized block to the log and writes a compact Org review entry to the scorecard.
+When you start a block, Emacs writes the declared task, done condition, artifact goal, and drift budget. When you stop a block, AutoLog appends the finalized block to the log and optionally records a short `tomorrow starts with` note to preserve momentum.
 
 ### Emacs commands
 
@@ -79,22 +88,21 @@ SPC n z e  stop focus block
 SPC n z t  show current active block
 SPC n z l  show recent blocks
 SPC n z p  show productivity summary
-SPC n z c  open scorecard
 SPC n z d  open today dashboard
 ```
 
 Starting a block prompts for:
 
 - task
-- done condition
 - artifact goal
 - drift budget in minutes
+- optional done condition
 
 Stopping a block prompts for:
 
 - actual artifact
-- self-score `/10`
-- notes on drift or execution
+- tomorrow's first step
+- optional notes on drift or execution
 
 ### Productivity metrics
 
@@ -108,7 +116,6 @@ Recent productivity is computed directly from focus-block history. The report cu
 - completed focus time
 - average block length
 - deep blocks (`>=60m`)
-- average self-score
 - completed-day streak
 - daily breakdown
 
@@ -121,7 +128,7 @@ This is meant to answer two different questions:
 
 | Component | What it does |
 |-----------|-------------|
-| `ScreenCapture.swift` | Screenshots via `/usr/sbin/screencapture` CLI (avoids macOS Sequoia permission re-prompts) |
+| `ScreenCapture.swift` | Screenshots via `CGDisplayCreateImage` with Screen Recording permission |
 | `OCRProcessor.swift` | Full-screen text recognition via Apple Vision framework |
 | `AccessibilityReader.swift` | Window titles and app metadata via AXUIElement + NSWorkspace |
 | `AppMetadataReader.swift` | Document paths, URLs, focused element role via Accessibility API |
@@ -160,9 +167,16 @@ GET  /v1/graph              -- full activity graph (nodes + edges)
 GET  /v1/entities           -- query by entity type/value
 GET  /v1/focus/current      -- active focus block + drift snapshot
 GET  /v1/focus/blocks       -- recent focus block history
+GET  /v1/focus/blocks/:id/report -- block-level coverage, drift, app usage, resume hint
 POST /v1/search             -- full-text search across summaries
 POST /v1/semantic-search    -- TF-IDF similarity search
 ```
+
+Focus-aware summary and activity payloads now include:
+
+- `focus_block_id`
+- `focus_alignment`
+- `study_coverage`
 
 ## Setup
 
@@ -176,17 +190,14 @@ POST /v1/semantic-search    -- TF-IDF similarity search
 ### Build and run
 
 ```bash
-# Build
-swift build
+# Install the app bundle to /Applications and launch it
+make install-app
 
-# Create app bundle with icon
-make bundle
-
-# Launch
-open .build/AutoLog.app
+# Or build a local app bundle and launch it without installing
+make run-bundle
 ```
 
-Grant Accessibility permission when prompted. Screen Recording permission is handled automatically via the system `screencapture` CLI.
+Grant Screen Recording and Accessibility when prompted. For reliable Screen Recording registration on macOS, launch the bundled app with `make install-app` or `make run-bundle`, not the raw executable.
 
 ### Obsidian sync
 
@@ -196,6 +207,26 @@ python3 scripts/obsidian-sync.py 4
 ```
 
 Set up as a launchd agent for automatic sync (plist templates in `launchd/`).
+
+### Launchd app agent
+
+Install the bundled AutoLog login agent with:
+
+```bash
+./scripts/install-launchd.sh
+```
+
+The app agent is configured to wait on the app process, restart it after
+crashes, and write logs to:
+
+- `~/Library/Logs/autolog-app.log`
+- `~/Library/Logs/autolog-app.err`
+
+Check its state with:
+
+```bash
+launchctl print gui/$(id -u)/com.autolog.app
+```
 
 ### Focus block CLI
 
@@ -214,6 +245,9 @@ python3 scripts/focus_state.py list --include-open --limit 10
 
 # Show 7-day productivity summary
 python3 scripts/focus_state.py productivity --days 7
+
+# Create today's lightweight todo file
+python3 scripts/focus_state.py today
 ```
 
 ### Configuration
@@ -223,9 +257,24 @@ AutoLog uses `UserDefaults` for configuration. Key settings:
 | Setting | Default | What it controls |
 |---------|---------|-----------------|
 | `llmEndpointURL` | -- | LLM proxy URL (e.g., `http://127.0.0.1:11434/v1/chat/completions`) |
-| `captureSpeed` | `medium` | Capture frequency: `fast` (5s), `medium` (10s), `slow` (30s) |
+| `captureSpeed` | `medium` | Capture frequency floor: `fast` (8s), `medium` (15s), `slow` (30s) |
 | `adaptiveIntervalEnabled` | `true` | Back off capture rate when screen is idle |
 | `apiServerPort` | `21890` | Local API server port |
+| `summarizedCaptureRetentionHours` | `24` | Delete raw captures this many hours after they are summarized |
+
+### Focus Reports
+
+For any completed focus block, AutoLog can now build a report that combines:
+
+- overlapping summaries
+- overlapping sessions
+- inferred activities
+- app usage during the block
+- covered sections and concepts
+- drift segments
+- a resume hint
+
+This works best for blocks created after direct `focus_block_id` linkage was added, but older blocks are still supported through time-overlap fallback.
 
 ## Cost
 
@@ -241,7 +290,7 @@ LLM calls go through a local `claude -p` proxy using Haiku:
 - Password managers and System Settings are excluded from capture by default
 - AutoLog's own windows are excluded from screenshots
 - LLM calls go through your local proxy, not to a third-party API
-- Captures are pruned after 72 hours; summaries persist indefinitely
+- Summarized captures are pruned after 24 hours by default; summaries persist indefinitely
 - No telemetry, no analytics, no network calls except to your LLM proxy
 
 ## Credits

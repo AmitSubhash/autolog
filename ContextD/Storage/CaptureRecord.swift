@@ -53,6 +53,9 @@ struct CaptureRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
     /// AX role of the currently focused UI element.
     var focusedElementRole: String?
 
+    /// Focus block active when this capture was recorded.
+    var focusBlockId: String?
+
     // MARK: - Table mapping
 
     static let databaseTableName = "captures"
@@ -61,7 +64,7 @@ struct CaptureRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
         case id, timestamp, appName, appBundleID, windowTitle
         case ocrText, fullOcrText, visibleWindows, textHash, isSummarized
         case frameType, keyframeId, changePercentage
-        case documentPath, browserURL, focusedElementRole
+        case documentPath, browserURL, focusedElementRole, focusBlockId
     }
 
     // MARK: - Record lifecycle
@@ -98,6 +101,7 @@ extension CaptureRecord {
         self.documentPath = frame.documentPath
         self.browserURL = frame.browserURL
         self.focusedElementRole = frame.focusedElementRole
+        self.focusBlockId = frame.focusBlockId
 
         // Encode visible windows as JSON
         if let data = try? JSONEncoder().encode(frame.visibleWindows),

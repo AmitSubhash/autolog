@@ -360,6 +360,64 @@ final class AppDatabase: Sendable {
             }
         }
 
+        migrator.registerMigration("v11_dedupeActivityGraph") { db in
+            try db.execute(sql: """
+                DELETE FROM activity_entities
+                WHERE id NOT IN (
+                    SELECT MIN(id)
+                    FROM activity_entities
+                    GROUP BY activityId, entityType, entityValue
+                )
+            """)
+            try db.execute(sql: """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_entities_unique
+                ON activity_entities(activityId, entityType, entityValue)
+            """)
+
+            try db.execute(sql: """
+                DELETE FROM activity_links
+                WHERE id NOT IN (
+                    SELECT MIN(id)
+                    FROM activity_links
+                    GROUP BY sourceActivityId, targetActivityId, linkType, IFNULL(sharedEntity, '')
+                )
+            """)
+            try db.execute(sql: """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_links_unique
+                ON activity_links(sourceActivityId, targetActivityId, linkType, IFNULL(sharedEntity, ''))
+            """)
+        }
+
+        migrator.registerMigration("v12_addFocusContext") { db in
+            try db.alter(table: "captures") { t in
+                t.add(column: "focusBlockId", .text)
+            }
+            try db.create(index: "idx_captures_focus_block",
+                          on: "captures", columns: ["focusBlockId"], ifNotExists: true)
+
+            try db.alter(table: "app_sessions") { t in
+                t.add(column: "focusBlockId", .text)
+            }
+            try db.create(index: "idx_app_sessions_focus_block",
+                          on: "app_sessions", columns: ["focusBlockId"], ifNotExists: true)
+
+            try db.alter(table: "summaries") { t in
+                t.add(column: "focusBlockId", .text)
+                t.add(column: "focusAlignment", .text)
+                t.add(column: "studyCoverage", .text)
+            }
+            try db.create(index: "idx_summaries_focus_block",
+                          on: "summaries", columns: ["focusBlockId"], ifNotExists: true)
+
+            try db.alter(table: "activities") { t in
+                t.add(column: "focusBlockId", .text)
+                t.add(column: "focusAlignment", .text)
+                t.add(column: "studyCoverage", .text)
+            }
+            try db.create(index: "idx_activities_focus_block",
+                          on: "activities", columns: ["focusBlockId"], ifNotExists: true)
+        }
+
         return migrator
     }
 }

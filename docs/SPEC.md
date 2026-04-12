@@ -1052,7 +1052,7 @@ All configurable settings with their defaults:
 | `keyframeChangeThreshold`            | Double | 0.50    |
 | `apiServerEnabled`                   | Bool   | true*   |
 | `apiServerPort`                      | Int    | 21890   |
-| `retentionDays`                      | Int    | 7       |
+| `summarizedCaptureRetentionHours`    | Int    | 24      |
 | `summarizationChunkDuration`         | Double | 300     |
 | `summarizationPollInterval`          | Double | 60      |
 | `summarizationMinAge`                | Double | 300     |
@@ -1079,6 +1079,34 @@ All configurable settings with their defaults:
 *`apiServerEnabled` defaults to enabled if the key has never been set (checked via
 `UserDefaults.object(forKey:) != nil`).
 
+### Focus-aware data binding
+
+Newer builds bind focus blocks directly into stored runtime data:
+
+- `captures.focusBlockId`
+- `app_sessions.focusBlockId`
+- `summaries.focusBlockId`, `summaries.focusAlignment`, `summaries.studyCoverage`
+- `activities.focusBlockId`, `activities.focusAlignment`, `activities.studyCoverage`
+
+This direct linkage is preferred over time-overlap matching. Historical data from
+before the migration still uses overlap fallback in report generation and Obsidian sync.
+
+### Focus block report endpoint
+
+`GET /v1/focus/blocks/:id/report`
+
+Returns a block-level report containing:
+
+- block metadata
+- overlapping activities
+- app usage during the block
+- covered sections
+- covered concepts
+- drift segments
+- resume hint
+- summary count
+- session count
+
 ---
 
 ## 17. Build & Development
@@ -1102,7 +1130,7 @@ targets:
 |---------------------|----------------------------------------------|
 | `make build`        | Debug build                                  |
 | `make release`      | Optimized release build                      |
-| `make run`          | Build + run (debug)                          |
+| `make run`          | Build + bundle + launch (preferred)          |
 | `make bundle`       | Create .app bundle for proper permissions    |
 | `make run-bundle`   | Build + bundle + launch via `open`           |
 | `make test`         | Run unit tests                               |

@@ -71,6 +71,12 @@ struct HealthResponse: Codable, Sendable {
     let summary_count: Int?
 }
 
+struct StudyCoverageItem: Codable, Sendable {
+    let resource: String?
+    let sections: [String]
+    let concepts: [String]
+}
+
 // MARK: - Summaries Endpoint
 
 /// A single activity summary.
@@ -89,6 +95,10 @@ struct SummaryItem: Codable, Sendable {
 
     /// Key topics/entities extracted from this activity.
     let key_topics: [String]
+
+    let focus_block_id: String?
+    let focus_alignment: String?
+    let study_coverage: StudyCoverageItem?
 }
 
 /// Response body for GET /v1/summaries
@@ -122,6 +132,10 @@ struct ActivityItem: Codable, Sendable {
 
     /// For captures: percentage of screen that changed (0.0-1.0). Nil for summaries.
     let change_percentage: Double?
+
+    let focus_block_id: String?
+    let focus_alignment: String?
+    let study_coverage: StudyCoverageItem?
 }
 
 /// Response body for GET /v1/activity
@@ -187,6 +201,7 @@ struct SessionItem: Codable, Sendable {
     let id: Int64
     let app_name: String
     let app_bundle_id: String?
+    let focus_block_id: String?
     let start_timestamp: String
     let end_timestamp: String
     let capture_count: Int
@@ -230,6 +245,9 @@ struct InferredActivityItem: Codable, Sendable {
     let id: Int64
     let name: String
     let description: String?
+    let focus_block_id: String?
+    let focus_alignment: String?
+    let study_coverage: StudyCoverageItem?
     let start_timestamp: String
     let end_timestamp: String
     let key_topics: [String]
@@ -297,6 +315,7 @@ struct FocusBlockItem: Codable, Sendable {
     let drift_budget_minutes: Int?
     let score: Int?
     let notes: String?
+    let next_step: String?
     let source: String?
     let status: String?
 }
@@ -319,4 +338,23 @@ struct FocusStatusResponse: Codable, Sendable {
 struct FocusBlocksResponse: Codable, Sendable {
     let blocks: [FocusBlockItem]
     let total: Int
+}
+
+struct FocusReportSegmentItem: Codable, Sendable {
+    let start_timestamp: String
+    let end_timestamp: String
+    let focus_alignment: String
+    let summary: String
+}
+
+struct FocusBlockReportResponse: Codable, Sendable {
+    let block: FocusBlockItem
+    let activities: [InferredActivityItem]
+    let app_usage: [AppUsageItem]
+    let covered_sections: [String]
+    let covered_concepts: [String]
+    let drift_segments: [FocusReportSegmentItem]
+    let resume_hint: String?
+    let summary_count: Int
+    let session_count: Int
 }

@@ -50,6 +50,9 @@ final class AccessibilityReader: Sendable {
         }
 
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        // Set timeout before the first AX request so a hung frontmost app
+        // cannot stall the capture loop indefinitely.
+        AXUIElementSetMessagingTimeout(appElement, 0.1)
 
         var windowValue: AnyObject?
         let result = AXUIElementCopyAttributeValue(
@@ -64,6 +67,7 @@ final class AccessibilityReader: Sendable {
 
         // AXUIElement is a CFTypeRef; CFTypeID check is the safe pattern
         let axWindow = windowElement as! AXUIElement
+        AXUIElementSetMessagingTimeout(axWindow, 0.1)
 
         var titleValue: AnyObject?
         let titleResult = AXUIElementCopyAttributeValue(

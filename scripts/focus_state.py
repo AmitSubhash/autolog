@@ -4,7 +4,8 @@ This module provides a small file-based contract between Emacs and AutoLog.
 Emacs owns the user's declared intent and writes the current block to
 ``~/.config/autolog/focus-state.json``. Completed blocks are appended to
 ``~/.config/autolog/focus-blocks.jsonl`` so the app and vault sync can bind
-captured activity back to a declared task.
+captured activity back to a declared task. A lightweight `~/org/today.org`
+template keeps the daily list and warm-start note separate from the log.
 """
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ from typing import Any
 FOCUS_DIR = Path.home() / ".config" / "autolog"
 CURRENT_STATE_PATH = FOCUS_DIR / "focus-state.json"
 BLOCKS_LOG_PATH = FOCUS_DIR / "focus-blocks.jsonl"
-DEFAULT_SCORECARD_PATH = Path.home() / "org" / "autolog-scorecard.org"
+DEFAULT_TODAY_PATH = Path.home() / "org" / "today.org"
 STALE_BLOCK_THRESHOLD = timedelta(hours=12)
 STALE_BLOCK_NOTE = "Auto-closed stale focus block after 12h without an explicit stop."
 
@@ -169,6 +170,19 @@ def best_matching_focus_block(
     return best_block if best_overlap > 0 else None
 
 
+def focus_block_by_id(
+    block_id: str | None,
+    blocks: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Return the block with the matching ID, if present."""
+    if not block_id:
+        return None
+    for block in blocks:
+        if block.get("id") == block_id:
+            return block
+    return None
+
+
 def focus_block_note_name(block: dict[str, Any]) -> str:
     """Build a stable note name for a focus block."""
     started = (_parse_iso(block.get("started_at")) or datetime.now()).strftime("%Y-%m-%d_%H-%M")
@@ -198,47 +212,6 @@ def _truncate(text: str, width: int) -> str:
     return text[: width - 1] + "…"
 
 
-def _ensure_scorecard_file(path: Path) -> None:
-    if path.exists():
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("#+title: AutoLog Scorecard\n\n* Inbox Reviews\n", encoding="utf-8")
-
-
-def append_scorecard_entry(block: dict[str, Any]) -> Path:
-    """Append a compact Org review entry for a completed block."""
-    target = Path(block.get("scorecard_path") or DEFAULT_SCORECARD_PATH).expanduser()
-    _ensure_scorecard_file(target)
-
-    started = _parse_iso(block.get("started_at")) or datetime.now()
-    ended = _parse_iso(block.get("ended_at")) or datetime.now()
-    duration_minutes = block_duration_minutes(block)
-    title = started.strftime("%Y-%m-%d %H:%M")
-    notes = block.get("notes", "").strip()
-    artifact_goal = block.get("artifact_goal", "").strip()
-    artifact = block.get("artifact", "").strip()
-    done_when = block.get("done_when", "").strip()
-    score = block.get("score")
-
-    entry_lines = [
-        "",
-        f"** [{title}] {block.get('task', 'Focus Block')}",
-        f"- Status :: {block.get('status', 'completed')}",
-        f"- Started :: {started.isoformat(timespec='seconds')}",
-        f"- Ended :: {ended.isoformat(timespec='seconds')}",
-        f"- Duration :: {_format_minutes(duration_minutes)}",
-    ]
-    if done_when:
-        entry_lines.append(f"- Done when :: {done_when}")
-    if artifact_goal:
-        entry_lines.append(f"- Planned artifact :: {artifact_goal}")
-    entry_lines.append(f"- Actual artifact :: {artifact or '-'}")
-    entry_lines.append(f"- Focus score /10 :: {score if score is not None else '-'}")
-    entry_lines.append(f"- Notes :: {notes or '-'}")
-    target.write_text(target.read_text(encoding="utf-8") + "\n".join(entry_lines) + "\n", encoding="utf-8")
-    return target
-
-
 def render_recent_blocks(limit: int = 12, include_open: bool = True) -> str:
     """Render a readable list of recent focus blocks."""
     blocks = load_focus_blocks(include_open=include_open)[: max(1, limit)]
@@ -247,18 +220,17 @@ def render_recent_blocks(limit: int = 12, include_open: bool = True) -> str:
         lines.append("No focus blocks yet.")
         return "\n".join(lines)
 
-    header = f"{'Status':<12} {'Start':<16} {'Min':>5} {'Score':>5}  Task"
+    header = f"{'Status':<12} {'Start':<16} {'Min':>5}  Task"
     lines.append(header)
     lines.append("-" * len(header))
     for block in blocks:
         started = _parse_iso(block.get("started_at"))
         start_label = started.strftime("%m-%d %H:%M") if started else "unknown"
-        score = "-" if block.get("score") is None else str(block["score"])
         lines.append(
             f"{_truncate(str(block.get('status', 'completed')), 12):<12} "
             f"{start_label:<16} "
             f"{block_duration_minutes(block):>5} "
-            f"{score:>5}  "
+            "  "
             f"{_truncate(str(block.get('task', 'Focus Block')), 70)}"
         )
     return "\n".join(lines)
@@ -286,7 +258,6 @@ def compute_productivity_summary(days: int = 7) -> dict[str, Any]:
     abandoned = [block for block in blocks if block.get("status") == "abandoned"]
     total_minutes = sum(block_duration_minutes(block) for block in blocks)
     completed_minutes = sum(block_duration_minutes(block) for block in completed)
-    scored = [int(block["score"]) for block in blocks if isinstance(block.get("score"), int)]
     artifacts = [block for block in blocks if str(block.get("artifact", "")).strip()]
     deep_blocks = [block for block in completed if block_duration_minutes(block) >= 60]
 
@@ -299,28 +270,23 @@ def compute_productivity_summary(days: int = 7) -> dict[str, Any]:
         date_key = started.date().isoformat()
         entry = per_day.setdefault(
             date_key,
-            {"blocks": 0, "completed": 0, "minutes": 0, "scores": []},
+            {"blocks": 0, "completed": 0, "minutes": 0},
         )
         entry["blocks"] += 1
         entry["minutes"] += block_duration_minutes(block)
         if block.get("status") == "completed":
             entry["completed"] += 1
             completed_days.add(date_key)
-        if isinstance(block.get("score"), int):
-            entry["scores"].append(int(block["score"]))
 
     daily_breakdown = []
     for date_key in sorted(per_day.keys(), reverse=True):
         entry = per_day[date_key]
-        scores = entry.pop("scores")
         entry["date"] = date_key
-        entry["avg_score"] = round(sum(scores) / len(scores), 1) if scores else None
         daily_breakdown.append(entry)
 
     total_blocks = len(blocks)
     completion_rate = round((len(completed) / total_blocks) * 100, 1) if total_blocks else 0.0
     artifact_rate = round((len(artifacts) / total_blocks) * 100, 1) if total_blocks else 0.0
-    average_score = round(sum(scored) / len(scored), 1) if scored else None
     average_block_minutes = round(total_minutes / total_blocks, 1) if total_blocks else 0.0
     return {
         "days": max(1, days),
@@ -333,7 +299,6 @@ def compute_productivity_summary(days: int = 7) -> dict[str, Any]:
         "total_minutes": total_minutes,
         "completed_minutes": completed_minutes,
         "average_block_minutes": average_block_minutes,
-        "average_score": average_score,
         "deep_blocks": len(deep_blocks),
         "streak_days": _compute_streak(completed_days),
         "daily_breakdown": daily_breakdown,
@@ -360,11 +325,6 @@ def render_productivity_summary(days: int = 7) -> str:
         ),
         f"Average block: {_format_minutes(int(round(summary['average_block_minutes'])))}",
         f"Deep blocks (>=60m): {summary['deep_blocks']}",
-        (
-            "Average self-score: "
-            f"{summary['average_score']}/10" if summary["average_score"] is not None else
-            "Average self-score: -"
-        ),
         f"Completed-day streak: {summary['streak_days']}",
         "",
         "Daily breakdown",
@@ -374,13 +334,11 @@ def render_productivity_summary(days: int = 7) -> str:
         return "\n".join(lines)
 
     for entry in summary["daily_breakdown"]:
-        score = "-" if entry["avg_score"] is None else f"{entry['avg_score']}/10"
         lines.append(
             f"{entry['date']}  "
             f"{entry['blocks']} blocks  "
             f"{entry['completed']} completed  "
-            f"{_format_minutes(entry['minutes'])}  "
-            f"avg {score}"
+            f"{_format_minutes(entry['minutes'])}"
         )
     return "\n".join(lines)
 
@@ -391,7 +349,6 @@ def start_focus_block(
     artifact_goal: str = "",
     drift_budget_minutes: int = 10,
     source: str = "emacs-org",
-    scorecard_path: str = "",
 ) -> dict[str, Any]:
     """Create or replace the current focus block state."""
     task = task.strip()
@@ -412,7 +369,6 @@ def start_focus_block(
         "artifact": "",
         "drift_budget_minutes": max(1, drift_budget_minutes),
         "source": source,
-        "scorecard_path": scorecard_path.strip() or str(DEFAULT_SCORECARD_PATH),
         "status": "active",
     }
     _write_json(CURRENT_STATE_PATH, payload)
@@ -421,8 +377,8 @@ def start_focus_block(
 
 def stop_focus_block(
     artifact: str = "",
-    score: int | None = None,
     notes: str = "",
+    next_step: str = "",
     status: str = "completed",
 ) -> dict[str, Any] | None:
     """Finalize the current focus block and append it to the log."""
@@ -433,14 +389,13 @@ def stop_focus_block(
     ended = dict(current)
     ended["ended_at"] = _now_iso()
     ended["artifact"] = artifact.strip() or current.get("artifact", "")
-    ended["score"] = score
     ended["notes"] = notes.strip()
+    ended["next_step"] = next_step.strip()
     ended["status"] = status
 
     _ensure_focus_dir()
     with BLOCKS_LOG_PATH.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(ended, sort_keys=True) + "\n")
-    append_scorecard_entry(ended)
 
     try:
         CURRENT_STATE_PATH.unlink()
@@ -449,30 +404,31 @@ def stop_focus_block(
     return ended
 
 
-def build_scorecard_template(date_str: str | None = None) -> str:
-    """Return a compact Org-mode scorecard template."""
+def build_today_template(date_str: str | None = None) -> str:
+    """Return a compact Org-mode today template."""
     date_str = date_str or datetime.now().strftime("%Y-%m-%d")
     return (
-        f"* {date_str}\n"
-        ":PROPERTIES:\n"
-        f":CREATED: {_now_iso()}\n"
-        ":END:\n\n"
-        "** Block Review\n"
-        "- Planned task :: \n"
-        "- Actual artifact :: \n"
-        "- Drift minutes :: \n"
-        "- Focus score /10 :: \n"
-        "- What caused drift :: \n"
-        "- What to repeat tomorrow :: \n"
+        "#+title: Today\n\n"
+        f"# {date_str}\n\n"
+        "* Today\n"
+        "- [ ] Artifact:\n"
+        "- [ ] Admin/life:\n"
+        "- [ ] Optional:\n\n"
+        "* First Step\n"
+        "- [ ] 5-minute visible action:\n\n"
+        "* Parking Lot\n\n"
+        "* Shutdown\n"
+        "Artifact or progress:\n"
+        "Tomorrow starts with:\n"
     )
 
 
-def write_scorecard(path: str = "", date_str: str | None = None) -> Path:
-    """Create today's scorecard file if it does not already exist."""
-    target = Path(path).expanduser() if path else DEFAULT_SCORECARD_PATH
+def write_today_file(path: str = "", date_str: str | None = None, force: bool = False) -> Path:
+    """Create or refresh the lightweight today file."""
+    target = Path(path).expanduser() if path else DEFAULT_TODAY_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
-    if not target.exists():
-        target.write_text(build_scorecard_template(date_str), encoding="utf-8")
+    if force or not target.exists() or not target.read_text(encoding="utf-8").strip():
+        target.write_text(build_today_template(date_str), encoding="utf-8")
     return target
 
 
@@ -483,7 +439,6 @@ def _cmd_start(args: argparse.Namespace) -> int:
         artifact_goal=args.artifact_goal,
         drift_budget_minutes=args.drift_budget,
         source=args.source,
-        scorecard_path=args.scorecard_path,
     )
     print(json.dumps(payload, indent=2))
     return 0
@@ -492,8 +447,8 @@ def _cmd_start(args: argparse.Namespace) -> int:
 def _cmd_stop(args: argparse.Namespace) -> int:
     payload = stop_focus_block(
         artifact=args.artifact,
-        score=args.score,
         notes=args.notes,
+        next_step=args.next_step,
         status=args.status,
     )
     if payload is None:
@@ -512,8 +467,8 @@ def _cmd_status(_: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_scorecard(args: argparse.Namespace) -> int:
-    path = write_scorecard(path=args.path, date_str=args.date)
+def _cmd_today(args: argparse.Namespace) -> int:
+    path = write_today_file(path=args.path, date_str=args.date, force=args.force)
     print(str(path))
     return 0
 
@@ -539,13 +494,12 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument("--artifact-goal", default="")
     start.add_argument("--drift-budget", type=int, default=10)
     start.add_argument("--source", default="emacs-org")
-    start.add_argument("--scorecard-path", default="")
     start.set_defaults(func=_cmd_start)
 
     stop = subparsers.add_parser("stop", help="Stop the current focus block.")
     stop.add_argument("--artifact", default="")
-    stop.add_argument("--score", type=int)
     stop.add_argument("--notes", default="")
+    stop.add_argument("--next-step", default="")
     stop.add_argument(
         "--status",
         choices=["completed", "interrupted", "abandoned"],
@@ -556,10 +510,11 @@ def build_parser() -> argparse.ArgumentParser:
     status = subparsers.add_parser("status", help="Print the current focus block.")
     status.set_defaults(func=_cmd_status)
 
-    scorecard = subparsers.add_parser("scorecard", help="Create today's scorecard file.")
-    scorecard.add_argument("--path", default="")
-    scorecard.add_argument("--date", default="")
-    scorecard.set_defaults(func=_cmd_scorecard)
+    today = subparsers.add_parser("today", help="Create today's lightweight todo file.")
+    today.add_argument("--path", default="")
+    today.add_argument("--date", default="")
+    today.add_argument("--force", action="store_true")
+    today.set_defaults(func=_cmd_today)
 
     list_cmd = subparsers.add_parser("list", help="Show recent focus blocks.")
     list_cmd.add_argument("--limit", type=int, default=12)

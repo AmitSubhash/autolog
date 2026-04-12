@@ -15,7 +15,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var sidePanelController: SidePanelController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        LaunchAgentControl.clearGracefulQuitRequest()
         DefaultsMigration.migrateLegacyContextDDefaults()
+        DefaultsMigration.applyPerformanceDefaults()
 
         // LSUIElement apps default to .prohibited activation policy, which prevents
         // windows from coming to the foreground and receiving keyboard input.
@@ -36,11 +38,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let hasOnboarded = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
 
         if hasOnboarded {
-            // Already onboarded -- start services immediately.
-            // Optimistically mark screen recording as granted since CGPreflight can
-            // return stale results on macOS 15+ after re-codesign. Captures fail
-            // gracefully if permission was truly revoked.
+            // Already onboarded -- start services immediately and refresh the
+            // real permission state using the functional probe.
             logger.info("Previously onboarded -- starting services directly")
+            PermissionManager.shared.refreshStatus()
             PermissionManager.shared.markOnboardingComplete()
             PermissionManager.shared.startPeriodicCheck()
             ServiceContainer.shared.startServices()
@@ -57,6 +58,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             logger.info("First launch -- showing permissions dialog")
             showOnboardingWindow()
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        LaunchAgentControl.markGracefulQuitRequest()
     }
 
     // MARK: - Status Bar Icon
@@ -150,8 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             permissionManager: permissionManager,
             onComplete: { [weak self] in
                 UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
-                // Optimistically mark screen recording as granted so services start
-                // even if CGPreflight returns stale results after re-codesign.
+                PermissionManager.shared.refreshStatus()
                 PermissionManager.shared.markOnboardingComplete()
                 self?.onboardingWindow?.close()
                 self?.onboardingWindow = nil
@@ -168,7 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         window.title = "Welcome to AutoLog"
-        window.contentView = NSHostingView(rootView: onboardingView)
+        window.contentView = makeStableHostingView(rootView: onboardingView)
         window.center()
         window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)
@@ -407,7 +411,7 @@ final class DebugWindowController {
         )
 
         window.title = "AutoLog - Database Debug"
-        window.contentView = NSHostingView(rootView: contentView)
+        window.contentView = makeStableHostingView(rootView: contentView)
         window.center()
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("DebugWindow")
@@ -464,7 +468,7 @@ final class EnrichmentPanelController {
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
-        panel.contentView = NSHostingView(rootView: contentView)
+        panel.contentView = makeStableHostingView(rootView: contentView)
         panel.isReleasedWhenClosed = false
         // becomesKeyOnlyIfNeeded must be false so the panel accepts keyboard input
         panel.becomesKeyOnlyIfNeeded = false

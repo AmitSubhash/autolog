@@ -41,10 +41,10 @@ final class CaptureEngine: ObservableObject {
     let logger = DualLogger(category: "CaptureEngine")
 
     /// The base interval between captures in seconds (used when adaptive is off).
-    var captureInterval: TimeInterval = 10.0
+    var captureInterval: TimeInterval = 15.0
 
     /// Maximum time between keyframes in seconds.
-    var maxKeyframeInterval: TimeInterval = 60
+    var maxKeyframeInterval: TimeInterval = 90
 
     /// The pixel diff engine.
     let imageDiffer = ImageDiffer()
@@ -81,6 +81,14 @@ final class CaptureEngine: ObservableObject {
     /// Whether adaptive interval scaling is enabled. Stored in UserDefaults.
     var adaptiveIntervalEnabled: Bool = true
 
+    /// Legacy installs often carried over very aggressive sub-5s intervals.
+    static let minimumCaptureInterval: TimeInterval = 8.0
+
+    /// Small visual churn does not need OCR on every single capture.
+    private let minorDeltaChangeThreshold: Double = 0.08
+    private let presentationDeltaChangeThreshold: Double = 0.15
+    private var isPresentationContext = false
+
     /// Capture speed preset. Controls base interval and adaptive tier scaling.
     enum CaptureSpeed: String, CaseIterable, Sendable {
         case fast   // 5/10/20/40s  - frequent captures, higher battery
@@ -89,17 +97,17 @@ final class CaptureEngine: ObservableObject {
 
         var baseInterval: TimeInterval {
             switch self {
-            case .fast:   return 5.0
-            case .medium: return 10.0
+            case .fast:   return 8.0
+            case .medium: return 15.0
             case .slow:   return 30.0
             }
         }
 
         var tiers: (tier1: TimeInterval, tier2: TimeInterval, tier3: TimeInterval) {
             switch self {
-            case .fast:   return (10.0, 20.0, 40.0)
-            case .medium: return (20.0, 30.0, 45.0)
-            case .slow:   return (60.0, 90.0, 180.0)
+            case .fast:   return (15.0, 24.0, 36.0)
+            case .medium: return (30.0, 45.0, 60.0)
+            case .slow:   return (60.0, 90.0, 120.0)
             }
         }
 
@@ -116,13 +124,13 @@ final class CaptureEngine: ObservableObject {
     /// @Published so SwiftUI observes changes from the speed picker.
     @Published var captureSpeed: CaptureSpeed = .medium {
         didSet {
-            captureInterval = captureSpeed.baseInterval
+            captureInterval = max(captureInterval, captureSpeed.baseInterval)
             UserDefaults.standard.set(captureSpeed.rawValue, forKey: "captureSpeed")
         }
     }
 
     /// Count of consecutive skipped frames (no pixel change detected).
-    internal(set) var consecutiveSkips: Int = 0
+    var consecutiveSkips: Int = 0
 
     /// The current effective capture interval, accounting for adaptive backoff,
     /// low power mode, and thermal state.
@@ -132,6 +140,10 @@ final class CaptureEngine: ObservableObject {
         // Low Power Mode: enforce minimum 5s
         if ProcessInfo.processInfo.isLowPowerModeEnabled {
             interval = max(interval, 5.0)
+        }
+
+        if isPresentationContext {
+            interval = max(interval, presentationIntervalFloor)
         }
 
         // Thermal throttling: back off aggressively to let the machine cool down
@@ -153,6 +165,34 @@ final class CaptureEngine: ObservableObject {
         case 3...5:   return tiers.tier1        // slowing down
         case 6...10:  return tiers.tier2        // mostly static
         default:      return tiers.tier3        // reading/idle
+        }
+    }
+
+    /// Minor deltas are allowed through only at a slower cadence so we do not
+    /// spend OCR budget on tiny UI churn every capture cycle.
+    private var minimumDeltaCaptureInterval: TimeInterval {
+        max(12.0, captureInterval)
+    }
+
+    private var minimumStoredCaptureSpacing: TimeInterval {
+        switch captureSpeed {
+        case .fast:
+            return 6.0
+        case .medium:
+            return 10.0
+        case .slow:
+            return 20.0
+        }
+    }
+
+    private var presentationIntervalFloor: TimeInterval {
+        switch captureSpeed {
+        case .fast:
+            return 15.0
+        case .medium:
+            return 25.0
+        case .slow:
+            return 40.0
         }
     }
 
@@ -203,7 +243,7 @@ final class CaptureEngine: ObservableObject {
         if let rawSpeed = UserDefaults.standard.string(forKey: "captureSpeed"),
            let speed = CaptureSpeed(rawValue: rawSpeed) {
             self.captureSpeed = speed
-            self.captureInterval = speed.baseInterval
+            self.captureInterval = max(self.captureInterval, speed.baseInterval)
         }
     }
 
@@ -227,7 +267,8 @@ final class CaptureEngine: ObservableObject {
         captureTask = Task { [weak self] in
             guard let self = self else { return }
             // Wait for app lifecycle to fully initialize before first capture.
-            // Without this delay, the screencapture CLI may fail when launched via `open`.
+            // Without this delay, screen capture can fail during the first launch
+            // cycle immediately after the app is opened.
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             while !Task.isCancelled && self.isRunning {
                 if !self.isSleeping {
@@ -299,8 +340,10 @@ final class CaptureEngine: ObservableObject {
 
             // Step 1: Read accessibility metadata
             let metadata = accessibilityReader.readCurrentState()
+            isPresentationContext = isPresentationLike(metadata)
+            let focusBlockId = FocusStateStore.loadCurrent()?.id
 
-            // Step 2: Capture screenshot (async, via system screencapture CLI)
+            // Step 2: Capture screenshot (async)
             guard let image = try await screenCapture.captureMainDisplay() else {
                 lastError = "Screen capture failed. Re-grant Screen Recording for AutoLog in System Settings."
                 logger.warning("Screenshot capture returned nil")
@@ -323,6 +366,7 @@ final class CaptureEngine: ObservableObject {
                 try await handleKeyframe(
                     image: image,
                     metadata: metadata,
+                    focusBlockId: focusBlockId,
                     changePercentage: diffResult?.tileDiff.changePercentage ?? 1.0
                 )
 
@@ -331,6 +375,7 @@ final class CaptureEngine: ObservableObject {
                 try await handleDelta(
                     image: image,
                     metadata: metadata,
+                    focusBlockId: focusBlockId,
                     diffResult: diffResult
                 )
             }
@@ -376,8 +421,16 @@ final class CaptureEngine: ObservableObject {
         let isAppSwitch = appName != lastKeyframeAppName
         let timeSinceLastKeyframe = lastKeyframeTime.map { Date().timeIntervalSince($0) } ?? .infinity
         let isTimeCap = timeSinceLastKeyframe >= maxKeyframeInterval
+        let timeSinceLastStoredCapture = lastCaptureTime.map { Date().timeIntervalSince($0) } ?? .infinity
 
         if isSignificantChange || isAppSwitch || isTimeCap {
+            if !isTimeCap && timeSinceLastStoredCapture < minimumStoredCaptureSpacing {
+                logger.debug(
+                    "Skipping burst capture: "
+                        + "\(String(format: "%.0f", timeSinceLastStoredCapture))s since last stored capture"
+                )
+                return .skip
+            }
             if isSignificantChange {
                 logger.debug("Keyframe: \(String(format: "%.0f", diffResult.tileDiff.changePercentage * 100))% tiles changed")
             } else if isAppSwitch {
@@ -388,7 +441,53 @@ final class CaptureEngine: ObservableObject {
             return .keyframe(diffResult)
         }
 
+        let deltaThreshold = isPresentationContext
+            ? presentationDeltaChangeThreshold
+            : minorDeltaChangeThreshold
+        let minimumDeltaInterval = isPresentationContext
+            ? max(presentationIntervalFloor, minimumDeltaCaptureInterval)
+            : minimumDeltaCaptureInterval
+
+        if diffResult.tileDiff.changePercentage < deltaThreshold
+            && timeSinceLastStoredCapture < minimumDeltaInterval {
+            logger.debug(
+                "Skipping minor delta: "
+                    + "\(String(format: "%.0f", diffResult.tileDiff.changePercentage * 100))% tiles changed, "
+                    + "\(String(format: "%.0f", timeSinceLastStoredCapture))s since last stored capture"
+            )
+            return .skip
+        }
+
+        if captureSpeed != .fast {
+            logger.debug("\(captureSpeed.label) mode: promoting delta-sized change to keyframe")
+            return .keyframe(diffResult)
+        }
+
         return .delta(diffResult)
+    }
+
+    private func isPresentationLike(_ metadata: AccessibilityReader.ScreenMetadata) -> Bool {
+        let appName = metadata.appName.lowercased()
+        let title = metadata.windowTitle?.lowercased() ?? ""
+        let visible = metadata.visibleWindows
+            .map { "\($0.appName.lowercased()) \($0.windowTitle?.lowercased() ?? "")" }
+            .joined(separator: " | ")
+        let haystack = "\(appName) \(title) \(visible)"
+
+        let presentationKeywords = [
+            "canva",
+            "presentation",
+            "slides",
+            "meeting",
+            "screen share",
+            "speaker notes",
+            "teams",
+            "zoom",
+            "keynote",
+            "powerpoint",
+        ]
+
+        return presentationKeywords.contains { haystack.contains($0) }
     }
 
     // MARK: - Keyframe Handling
@@ -396,6 +495,7 @@ final class CaptureEngine: ObservableObject {
     private func handleKeyframe(
         image: CGImage,
         metadata: AccessibilityReader.ScreenMetadata,
+        focusBlockId: String?,
         changePercentage: Double
     ) async throws {
         // Full-screen OCR at .utility priority so macOS can throttle during interactive use
@@ -428,7 +528,8 @@ final class CaptureEngine: ObservableObject {
             changePercentage: changePercentage,
             documentPath: metadata.documentPath,
             browserURL: metadata.browserURL,
-            focusedElementRole: metadata.focusedElementRole
+            focusedElementRole: metadata.focusedElementRole,
+            focusBlockId: focusBlockId
         )
 
         // Store in database
@@ -459,6 +560,7 @@ final class CaptureEngine: ObservableObject {
     private func handleDelta(
         image: CGImage,
         metadata: AccessibilityReader.ScreenMetadata,
+        focusBlockId: String?,
         diffResult: DiffResult
     ) async throws {
         // Use partial OCR on changed regions when change is small (<50%).
@@ -512,7 +614,8 @@ final class CaptureEngine: ObservableObject {
             changePercentage: diffResult.tileDiff.changePercentage,
             documentPath: metadata.documentPath,
             browserURL: metadata.browserURL,
-            focusedElementRole: metadata.focusedElementRole
+            focusedElementRole: metadata.focusedElementRole,
+            focusBlockId: focusBlockId
         )
 
         // Store in database

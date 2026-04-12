@@ -36,6 +36,15 @@ struct ActivityRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
     /// Optional parent activity for hierarchical grouping
     var parentActivityId: Int64?
 
+    /// Focus block associated with this activity, if any.
+    var focusBlockId: String?
+
+    /// Heuristic focus alignment label for this activity.
+    var focusAlignment: String?
+
+    /// JSON-encoded study coverage hints aggregated for this activity.
+    var studyCoverage: String?
+
     // MARK: - Table mapping
 
     static let databaseTableName = "activities"
@@ -45,6 +54,7 @@ struct ActivityRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
         case startTimestamp, endTimestamp
         case keyTopics, documentPaths, browserURLs
         case confidence, isActive, parentActivityId
+        case focusBlockId, focusAlignment, studyCoverage
     }
 
     // MARK: - Record lifecycle
@@ -94,6 +104,10 @@ extension ActivityRecord {
 
     var duration: TimeInterval {
         endTimestamp - startTimestamp
+    }
+
+    var decodedStudyCoverage: StudyCoverage? {
+        FocusContextAnalyzer.decodeStudyCoverage(studyCoverage)
     }
 }
 

@@ -137,7 +137,7 @@ final class SettingsWindowController {
             defer: false
         )
         window.title = "AutoLog Settings"
-        window.contentView = NSHostingView(rootView: settingsView)
+        window.contentView = makeStableHostingView(rootView: settingsView)
         window.isReleasedWhenClosed = false
         window.center()
         window.makeKeyAndOrderFront(nil)

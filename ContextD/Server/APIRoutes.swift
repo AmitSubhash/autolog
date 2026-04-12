@@ -160,7 +160,10 @@ extension APIServer {
                         end_timestamp: isoFormatter.string(from: record.endDate),
                         app_names: record.decodedAppNames,
                         summary: record.summary,
-                        key_topics: record.decodedKeyTopics
+                        key_topics: record.decodedKeyTopics,
+                        focus_block_id: record.focusBlockId,
+                        focus_alignment: record.focusAlignment,
+                        study_coverage: Self.mapStudyCoverage(record.decodedStudyCoverage)
                     )
                 }
                 let response = SummariesResponse(
@@ -239,7 +242,10 @@ extension APIServer {
                             timestamp: outputFormatter.string(from: record.startDate),
                             app_name: record.decodedAppNames.joined(separator: ", "),
                             window_title: nil, text: record.summary,
-                            kind: "summary", frame_type: nil, change_percentage: nil
+                            kind: "summary", frame_type: nil, change_percentage: nil,
+                            focus_block_id: record.focusBlockId,
+                            focus_alignment: record.focusAlignment,
+                            study_coverage: Self.mapStudyCoverage(record.decodedStudyCoverage)
                         )
                     }
                 } else {
@@ -253,7 +259,10 @@ extension APIServer {
                             app_name: record.appName,
                             window_title: record.windowTitle, text: record.fullOcrText,
                             kind: "capture", frame_type: record.frameType,
-                            change_percentage: record.changePercentage
+                            change_percentage: record.changePercentage,
+                            focus_block_id: record.focusBlockId,
+                            focus_alignment: nil,
+                            study_coverage: nil
                         )
                     }
                 }

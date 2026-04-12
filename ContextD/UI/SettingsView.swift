@@ -10,15 +10,15 @@ struct SettingsView: View {
         static let summarizationModel = "anthropic/claude-haiku-4-5"
         static let enrichmentPass1Model = "anthropic/claude-haiku-4-5"
         static let enrichmentPass2Model = "anthropic/claude-sonnet-4-6"
-        static let captureInterval: Double = 2.0
-        static let maxKeyframeInterval: Double = 60
+        static let captureInterval: Double = 15.0
+        static let maxKeyframeInterval: Double = 90
         static let keyframeChangeThreshold: Double = 0.50
         static let chunkDuration: Double = 60
         static let pollInterval: Double = 300
         static let minAge: Double = 60
         static let apiServerEnabled = true
         static let apiServerPort = 21890
-        static let retentionDays = 7
+        static let summarizedCaptureRetentionHours = 24
         static let summarizationMaxTokens = 1024
         static let enrichmentPass1MaxTokens = 1024
         static let enrichmentPass2MaxTokens = 2048
@@ -59,7 +59,8 @@ struct SettingsView: View {
     @AppStorage("apiServerPort") private var apiServerPort: Int = Defaults.apiServerPort
 
     // Storage Settings
-    @AppStorage("retentionDays") private var retentionDays: Int = Defaults.retentionDays
+    @AppStorage(SummarizationEngine.summarizedCaptureRetentionHoursKey)
+    private var summarizedCaptureRetentionHours: Int = Defaults.summarizedCaptureRetentionHours
 
     // LLM Token Limits
     @AppStorage("summarizationMaxTokens") private var summarizationMaxTokens: Int = Defaults.summarizationMaxTokens
@@ -168,7 +169,7 @@ struct SettingsView: View {
             Section("Capture") {
                 HStack {
                     Text("Capture interval:")
-                    Slider(value: $captureInterval, in: 1...10, step: 0.5)
+                    Slider(value: $captureInterval, in: 5...30, step: 1)
                     Text("\(String(format: "%.1f", captureInterval))s")
                         .monospacedDigit()
                         .frame(width: 40)
@@ -461,7 +462,14 @@ struct SettingsView: View {
     private var storageTab: some View {
         Form {
             Section("Retention") {
-                Stepper("Keep data for \(retentionDays) days", value: $retentionDays, in: 1...90)
+                Stepper(
+                    "Delete summarized captures after \(summarizedCaptureRetentionHours) hours",
+                    value: $summarizedCaptureRetentionHours,
+                    in: 1...168
+                )
+                Text("Raw captures are removed only after they have been summarized. Summary history stays in the database.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Summarization Timing") {

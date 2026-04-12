@@ -14,6 +14,11 @@ struct DualLogger: Sendable {
     private let category: String
 
     private static let subsystem = "com.autolog.app"
+    private static let fileLock = NSLock()
+    private static let logDirectory = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Logs", isDirectory: true)
+    private static let stdoutLogURL = logDirectory.appendingPathComponent("autolog-app.log")
+    private static let stderrLogURL = logDirectory.appendingPathComponent("autolog-app.err")
 
     /// Thread-safe timestamp format for stdout. Uses Date.FormatStyle instead of DateFormatter.
     private static let timestampStyle: Date.FormatStyle = .dateTime
@@ -28,32 +33,63 @@ struct DualLogger: Sendable {
     }
 
     func debug(_ message: String) {
-        printToStdout(level: "DEBUG", message: message)
+        emit(level: "DEBUG", message: message)
         logger.debug("\(message, privacy: .public)")
     }
 
     func info(_ message: String) {
-        printToStdout(level: "INFO", message: message)
+        emit(level: "INFO", message: message)
         logger.info("\(message, privacy: .public)")
     }
 
     func notice(_ message: String) {
-        printToStdout(level: "NOTICE", message: message)
+        emit(level: "NOTICE", message: message)
         logger.notice("\(message, privacy: .public)")
     }
 
     func warning(_ message: String) {
-        printToStdout(level: "WARN", message: message)
+        emit(level: "WARN", message: message)
         logger.warning("\(message, privacy: .public)")
     }
 
     func error(_ message: String) {
-        printToStdout(level: "ERROR", message: message)
+        emit(level: "ERROR", message: message)
         logger.error("\(message, privacy: .public)")
     }
 
-    private func printToStdout(level: String, message: String) {
+    private func emit(level: String, message: String) {
         let ts = Date.now.formatted(DualLogger.timestampStyle)
-        print("[\(ts)] [\(level)] [\(category)] \(message)")
+        let line = "[\(ts)] [\(level)] [\(category)] \(message)"
+        print(line)
+        writeToFile(line + "\n", errorOnly: level == "ERROR")
+    }
+
+    private func writeToFile(_ line: String, errorOnly: Bool) {
+        guard let data = line.data(using: .utf8) else { return }
+
+        DualLogger.fileLock.lock()
+        defer { DualLogger.fileLock.unlock() }
+
+        try? FileManager.default.createDirectory(
+            at: DualLogger.logDirectory,
+            withIntermediateDirectories: true
+        )
+
+        append(data, to: DualLogger.stdoutLogURL)
+        if errorOnly {
+            append(data, to: DualLogger.stderrLogURL)
+        }
+    }
+
+    private func append(_ data: Data, to url: URL) {
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(atPath: url.path, contents: data)
+            return
+        }
+
+        guard let handle = try? FileHandle(forWritingTo: url) else { return }
+        defer { try? handle.close() }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: data)
     }
 }

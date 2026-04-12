@@ -26,6 +26,9 @@ enum SummarizationMode: String, CaseIterable, Sendable {
 /// Runs periodically, picks up unsummarized captures, chunks them, and
 /// summarizes each chunk using the configured SummarizationMode.
 actor SummarizationEngine {
+    static let summarizedCaptureRetentionHoursKey = "summarizedCaptureRetentionHours"
+    static let defaultSummarizedCaptureRetentionHours = 24
+
     private let storageManager: StorageManager
     private let llmClient: LLMClient
     private let logger = DualLogger(category: "Summarization")
@@ -133,9 +136,12 @@ actor SummarizationEngine {
         pollCycleCount += 1
         if pollCycleCount % 10 == 0 {
             do {
-                let pruned = try storageManager.pruneProcessedCaptures(olderThan: 24)
+                let retentionHours = currentProcessedCaptureRetentionHours()
+                let pruned = try storageManager.pruneProcessedCaptures(olderThan: retentionHours)
                 if pruned > 0 {
-                    logger.info("Pruned \(pruned) processed captures older than 24h")
+                    logger.info(
+                        "Pruned \(pruned) processed captures older than \(retentionHours)h"
+                    )
                 }
             } catch {
                 logger.error("Failed to prune processed captures: \(error.localizedDescription)")
@@ -227,6 +233,9 @@ actor SummarizationEngine {
             .sorted { $0.key < $1.key }
             .map { "\($0.key): \($0.value)" }
 
+        let focusBlock = chunk.focusBlockId.flatMap(FocusStateStore.block(withId:))
+            ?? FocusStateStore.bestMatchingBlock(start: chunk.startTime, end: chunk.endTime)
+
         let userPrompt = PromptTemplates.render(
             PromptTemplates.template(for: .summarizationUser),
             values: [
@@ -274,18 +283,34 @@ actor SummarizationEngine {
         }
 
         let parsed = parseSummarizationResponse(llmResponse.text)
+        let analysis = FocusContextAnalyzer.analyze(
+            focusBlock: focusBlock,
+            appNames: chunk.appNames,
+            windowTitles: allVisibleWindows,
+            urls: urls,
+            text: parsed.summary,
+            previousAlignment: previousFocusAlignment(for: focusBlock?.id, before: chunk.startTime)
+        )
 
         // Merge LLM-extracted files/URLs with metadata from captures (belt and suspenders)
         let captureDocPaths = Set(chunk.captures.compactMap(\.documentPath))
         let captureURLs = Set(chunk.captures.compactMap(\.browserURL))
-        let allDocPaths = Array(captureDocPaths.union(parsed.filesMentioned))
-        let allURLs = Array(captureURLs.union(parsed.urlsVisited))
+        let normalized = ActivityGraphBuilder.normalizeEntities(
+            documentPaths: Array(captureDocPaths.union(parsed.filesMentioned)),
+            browserURLs: Array(captureURLs.union(parsed.urlsVisited)),
+            topics: parsed.keyTopics
+        )
 
         let record = try buildSummaryRecord(
             chunk: chunk, summary: parsed.summary, keyTopics: parsed.keyTopics,
-            documentPaths: allDocPaths, browserURLs: allURLs, activityType: parsed.activityType
+            documentPaths: normalized.files,
+            browserURLs: normalized.urls,
+            activityType: parsed.activityType,
+            focusBlockId: focusBlock?.id ?? chunk.focusBlockId,
+            focusAlignment: analysis.focusAlignment,
+            studyCoverage: analysis.studyCoverageJSON
         )
-        let inserted = try storageManager.insertSummary(record)
+        try storageManager.insertSummary(record)
         try storageManager.markCapturesAsSummarized(ids: chunk.captureIds)
 
         // TF-IDF embeddings are computed lazily on first semantic search query
@@ -301,7 +326,10 @@ actor SummarizationEngine {
         keyTopics: [String],
         documentPaths: [String],
         browserURLs: [String],
-        activityType: String?
+        activityType: String?,
+        focusBlockId: String?,
+        focusAlignment: String?,
+        studyCoverage: String?
     ) throws -> SummaryRecord {
         let encoder = JSONEncoder()
         let appNamesJSON = try String(data: encoder.encode(chunk.appNames), encoding: .utf8) ?? "[]"
@@ -322,8 +350,25 @@ actor SummarizationEngine {
             captureIds: captureIdsJSON,
             documentPaths: docPathsJSON,
             browserURLs: urlsJSON,
-            activityType: activityType
+            activityType: activityType,
+            focusBlockId: focusBlockId,
+            focusAlignment: focusAlignment,
+            studyCoverage: studyCoverage
         )
+    }
+
+    private func currentProcessedCaptureRetentionHours() -> Int {
+        let configured = UserDefaults.standard.integer(forKey: Self.summarizedCaptureRetentionHoursKey)
+        return configured > 0 ? configured : Self.defaultSummarizedCaptureRetentionHours
+    }
+
+    private func previousFocusAlignment(for focusBlockId: String?, before date: Date) -> String? {
+        guard let focusBlockId else { return nil }
+        let recent = (try? storageManager.recentSummaries(limit: 50)) ?? []
+        return recent
+            .filter { $0.focusBlockId == focusBlockId && $0.endTimestamp < date.timeIntervalSince1970 }
+            .sorted { $0.endTimestamp > $1.endTimestamp }
+            .first?.focusAlignment
     }
 
     /// Parsed fields from the LLM summarization response.

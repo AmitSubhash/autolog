@@ -69,7 +69,10 @@ extension APIServer {
                             end_timestamp: isoFormatter.string(from: record.endDate),
                             app_names: record.decodedAppNames,
                             summary: record.summary,
-                            key_topics: record.decodedKeyTopics
+                            key_topics: record.decodedKeyTopics,
+                            focus_block_id: record.focusBlockId,
+                            focus_alignment: record.focusAlignment,
+                            study_coverage: Self.mapStudyCoverage(record.decodedStudyCoverage)
                         ),
                         similarity: Double(similarity)
                     )

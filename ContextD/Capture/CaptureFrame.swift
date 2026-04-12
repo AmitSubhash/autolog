@@ -92,4 +92,7 @@ struct CaptureFrame: Sendable {
 
     /// AX role of the currently focused UI element (e.g., "AXTextField", "AXWebArea").
     let focusedElementRole: String?
+
+    /// Focus block active when this capture was recorded, if any.
+    let focusBlockId: String?
 }

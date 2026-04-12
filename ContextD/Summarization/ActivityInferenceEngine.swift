@@ -54,6 +54,7 @@ actor ActivityInferenceEngine {
         logger.info("Activity inference engine started (poll: \(self.pollInterval)s)")
 
         task = Task {
+            await self.backfillGraphIfNeeded()
             while !Task.isCancelled {
                 await self.processUninferredSessions()
                 try? await Task.sleep(nanoseconds: UInt64(self.pollInterval * 1_000_000_000))
@@ -92,6 +93,7 @@ actor ActivityInferenceEngine {
                     logger.error("Failed to infer batch: \(error.localizedDescription)")
                 }
             }
+            await backfillGraphIfNeeded()
         } catch {
             logger.error("Failed to fetch uninferred sessions: \(error.localizedDescription)")
         }
@@ -250,24 +252,48 @@ actor ActivityInferenceEngine {
         let startTs = groupSessions.map(\.startTimestamp).min() ?? 0
         let endTs = groupSessions.map(\.endTimestamp).max() ?? 0
 
-        let allDocPaths = Array(Set(groupSessions.flatMap(\.decodedDocumentPaths)))
-        let allURLs = Array(Set(groupSessions.flatMap(\.decodedBrowserURLs)))
+        let normalized = ActivityGraphBuilder.normalizeEntities(
+            documentPaths: Array(Set(groupSessions.flatMap(\.decodedDocumentPaths))),
+            browserURLs: Array(Set(groupSessions.flatMap(\.decodedBrowserURLs))),
+            topics: group.keyTopics
+        )
+        let focusBlock = FocusStateStore.bestMatchingBlock(
+            start: Date(timeIntervalSince1970: startTs),
+            end: Date(timeIntervalSince1970: endTs)
+        )
+        let overlappingSummaries = try storageManager.summaries(
+            from: Date(timeIntervalSince1970: startTs),
+            to: Date(timeIntervalSince1970: endTs),
+            limit: 50
+        )
+        let matchingSummaries = overlappingSummaries.filter {
+            focusBlock == nil || $0.focusBlockId == focusBlock?.id
+        }
+        let focusAlignment = FocusContextAnalyzer.aggregateFocusAlignment(
+            summaryAlignments: matchingSummaries.compactMap(\.focusAlignment)
+        )
+        let studyCoverage = FocusContextAnalyzer.aggregateStudyCoverage(
+            matchingSummaries.compactMap(\.decodedStudyCoverage)
+        )
 
         let topicsJSON = try String(
-            data: JSONEncoder().encode(group.keyTopics), encoding: .utf8
+            data: JSONEncoder().encode(normalized.topics), encoding: .utf8
         ) ?? "[]"
         let docsJSON = try String(
-            data: JSONEncoder().encode(allDocPaths), encoding: .utf8
+            data: JSONEncoder().encode(normalized.files), encoding: .utf8
         ) ?? "[]"
         let urlsJSON = try String(
-            data: JSONEncoder().encode(allURLs), encoding: .utf8
+            data: JSONEncoder().encode(normalized.urls), encoding: .utf8
         ) ?? "[]"
 
         var activity = ActivityRecord(
             id: nil, name: group.name, description: group.description,
             startTimestamp: startTs, endTimestamp: endTs,
             keyTopics: topicsJSON, documentPaths: docsJSON, browserURLs: urlsJSON,
-            confidence: group.confidence, isActive: true, parentActivityId: nil
+            confidence: group.confidence, isActive: true, parentActivityId: nil,
+            focusBlockId: focusBlock?.id,
+            focusAlignment: focusAlignment,
+            studyCoverage: studyCoverage
         )
         activity = try storageManager.insertActivity(activity)
 
@@ -281,12 +307,29 @@ actor ActivityInferenceEngine {
 
         try ActivityGraphBuilder.extractEntities(
             for: activityId, group: group,
-            docPaths: allDocPaths, urls: allURLs,
+            docPaths: normalized.files, urls: normalized.urls,
             storageManager: storageManager
         )
         try ActivityGraphBuilder.discoverLinks(
             for: activityId, storageManager: storageManager
         )
+    }
+
+    private func backfillGraphIfNeeded() async {
+        do {
+            let counts = try storageManager.activityGraphCounts()
+            guard counts.activities > 0 else { return }
+            guard counts.entities == 0 || counts.links == 0 || counts.entities < counts.activities else {
+                return
+            }
+
+            _ = try ActivityGraphBuilder.backfillGraph(
+                storageManager: storageManager,
+                logger: logger
+            )
+        } catch {
+            logger.error("Failed to backfill activity graph: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Validation

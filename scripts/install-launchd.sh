@@ -11,6 +11,8 @@ set -euo pipefail
 
 LAUNCHD_DIR="$HOME/Library/LaunchAgents"
 SRC_DIR="$(cd "$(dirname "$0")/../launchd" && pwd)"
+GUI_DOMAIN="gui/$(id -u)"
+PLIST_BUDDY="/usr/libexec/PlistBuddy"
 
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -21,13 +23,25 @@ RESET='\033[0m'
 # Ensure target directory exists
 mkdir -p "$LAUNCHD_DIR"
 
+plist_label() {
+    "$PLIST_BUDDY" -c "Print :Label" "$1"
+}
+
+bootout_job() {
+    local plist_path="$1"
+    local label="$2"
+    launchctl bootout "$GUI_DOMAIN" "$plist_path" 2>/dev/null || \
+        launchctl bootout "$GUI_DOMAIN/$label" 2>/dev/null || true
+}
+
 if [ "${1:-}" = "--remove" ]; then
     echo -e "${CYAN}Removing autolog launchd agents...${RESET}"
-    for plist in "$SRC_DIR"/com.autolog.*.plist; do
+    for plist in "$SRC_DIR"/*.plist; do
         [ -f "$plist" ] || continue
         name=$(basename "$plist")
+        label=$(plist_label "$plist")
         if [ -f "$LAUNCHD_DIR/$name" ]; then
-            launchctl unload "$LAUNCHD_DIR/$name" 2>/dev/null || true
+            bootout_job "$LAUNCHD_DIR/$name" "$label"
             rm -f "$LAUNCHD_DIR/$name"
             echo -e "  ${YELLOW}Removed: $name${RESET}"
         else
@@ -44,18 +58,21 @@ echo -e "  Target:  $LAUNCHD_DIR"
 echo ""
 
 installed=0
-for plist in "$SRC_DIR"/com.autolog.*.plist; do
+for plist in "$SRC_DIR"/*.plist; do
     [ -f "$plist" ] || continue
     name=$(basename "$plist")
+    label=$(plist_label "$plist")
+    target="$LAUNCHD_DIR/$name"
 
-    # Unload if already loaded (ignore errors for agents not yet loaded)
-    launchctl unload "$LAUNCHD_DIR/$name" 2>/dev/null || true
+    # Stop the existing job before replacing the plist.
+    bootout_job "$target" "$label"
 
     # Copy plist to LaunchAgents
-    cp "$plist" "$LAUNCHD_DIR/"
+    cp "$plist" "$target"
 
-    # Load the agent
-    launchctl load "$LAUNCHD_DIR/$name"
+    # Load and start the agent using modern launchctl verbs.
+    launchctl bootstrap "$GUI_DOMAIN" "$target"
+    launchctl kickstart -k "$GUI_DOMAIN/$label" 2>/dev/null || true
 
     echo -e "  ${GREEN}Installed: $name${RESET}"
     installed=$((installed + 1))
@@ -71,7 +88,7 @@ echo -e "${GREEN}All $installed launchd agents installed.${RESET}"
 echo -e "autolog will auto-start on login."
 echo ""
 echo "To verify:"
-echo "  launchctl list | grep autolog"
+echo "  launchctl print $GUI_DOMAIN/com.autolog.app"
 echo ""
 echo "To remove:"
 echo "  ./scripts/install-launchd.sh --remove"

@@ -11,6 +11,7 @@ set -euo pipefail
 PRODUCT="ContextD"
 SUBSYSTEM="com.autolog.app"
 BUILD_DIR=".build"
+APP_BUNDLE="${BUILD_DIR}/AutoLog.app"
 
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -36,11 +37,9 @@ case "${1:-}" in
         ;;
     --release)
         CONFIG="release"
-        BIN="${BUILD_DIR}/release/${PRODUCT}"
         ;;
     *)
         CONFIG="debug"
-        BIN="${BUILD_DIR}/debug/${PRODUCT}"
         ;;
 esac
 
@@ -53,10 +52,23 @@ fi
 echo -e "${GREEN}Build succeeded.${RESET}"
 echo ""
 
+# Create/update app bundle
+echo -e "${CYAN}Creating app bundle...${RESET}"
+mkdir -p "${APP_BUNDLE}/Contents/MacOS" "${APP_BUNDLE}/Contents/Resources"
+cp "${BUILD_DIR}/${CONFIG}/${PRODUCT}" "${APP_BUNDLE}/Contents/MacOS/${PRODUCT}"
+./scripts/gen-info-plist.sh > "${APP_BUNDLE}/Contents/Info.plist"
+if [ -f Resources/contextd.icns ]; then
+    cp Resources/contextd.icns "${APP_BUNDLE}/Contents/Resources/autolog.icns"
+fi
+if [ -f Resources/autolog-launch-agent.sh ]; then
+    cp Resources/autolog-launch-agent.sh "${APP_BUNDLE}/Contents/Resources/autolog-launch-agent.sh"
+    chmod 755 "${APP_BUNDLE}/Contents/Resources/autolog-launch-agent.sh"
+fi
+
 # Check if the app is already running
-if pgrep -f "${BIN}" > /dev/null 2>&1; then
+if pgrep -f "/Applications/AutoLog.app/Contents/MacOS/${PRODUCT}|${APP_BUNDLE}/Contents/MacOS/${PRODUCT}" > /dev/null 2>&1; then
     echo -e "${YELLOW}AutoLog is already running. Killing previous instance...${RESET}"
-    pkill -f "${BIN}" 2>/dev/null || true
+    pkill -f "${PRODUCT}" 2>/dev/null || true
     sleep 1
 fi
 
@@ -67,7 +79,9 @@ LOG_PID=$!
 sleep 0.5
 
 # Run the app
-echo -e "${CYAN}Starting ${PRODUCT}...${RESET}"
-echo -e "${YELLOW}Press Ctrl+C to stop both the app and log stream${RESET}"
+echo -e "${CYAN}Starting ${APP_BUNDLE}...${RESET}"
+echo -e "${YELLOW}Press Ctrl+C to stop log streaming. Quit the app separately when done.${RESET}"
 echo "────────────────────────────────────────"
-"${BIN}"
+open -na "${APP_BUNDLE}"
+
+wait "${LOG_PID}"

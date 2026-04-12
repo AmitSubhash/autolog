@@ -31,6 +31,9 @@ struct AppSessionRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
     /// JSON array of unique browser URLs seen during the session
     var browserURLs: String?
 
+    /// Focus block active for this session, if any.
+    var focusBlockId: String?
+
     /// Foreign key to activities table (Phase 3)
     var activityId: Int64?
 
@@ -45,7 +48,7 @@ struct AppSessionRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
         case id, appName, appBundleID
         case startTimestamp, endTimestamp, captureCount
         case windowTitles, documentPaths, browserURLs
-        case activityId, activityInferred
+        case focusBlockId, activityId, activityInferred
     }
 
     // MARK: - Record lifecycle

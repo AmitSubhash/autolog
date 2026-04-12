@@ -105,6 +105,7 @@ extension APIServer {
                         id: record.id ?? 0,
                         app_name: record.appName,
                         app_bundle_id: record.appBundleID,
+                        focus_block_id: record.focusBlockId,
                         start_timestamp: isoFormatter.string(from: record.startDate),
                         end_timestamp: isoFormatter.string(from: record.endDate),
                         capture_count: record.captureCount,
@@ -254,6 +255,9 @@ extension APIServer {
                 id: record.id ?? 0,
                 name: record.name,
                 description: record.description,
+                focus_block_id: record.focusBlockId,
+                focus_alignment: record.focusAlignment,
+                study_coverage: mapStudyCoverage(record.decodedStudyCoverage),
                 start_timestamp: isoFormatter.string(from: record.startDate),
                 end_timestamp: isoFormatter.string(from: record.endDate),
                 key_topics: record.decodedKeyTopics,
@@ -263,5 +267,14 @@ extension APIServer {
                 is_active: record.isActive
             )
         }
+    }
+
+    static func mapStudyCoverage(_ coverage: StudyCoverage?) -> StudyCoverageItem? {
+        guard let coverage else { return nil }
+        return StudyCoverageItem(
+            resource: coverage.resource,
+            sections: coverage.sections,
+            concepts: coverage.concepts
+        )
     }
 }

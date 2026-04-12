@@ -7,12 +7,29 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/open</string>
+        <string>/bin/bash</string>
+        <string>/Applications/AutoLog.app/Contents/Resources/autolog-launch-agent.sh</string>
         <string>/Applications/AutoLog.app</string>
     </array>
 
-    <key>RunAtLoad</key>
-    <true/>
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>com.autolog.app</string>
+    </array>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>Crashed</key>
+        <true/>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
+
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
 
     <key>StandardOutPath</key>
     <string>/Users/amit/Library/Logs/autolog-app.log</string>

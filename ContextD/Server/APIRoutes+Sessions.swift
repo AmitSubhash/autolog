@@ -51,6 +51,7 @@ extension APIServer {
                         id: record.id ?? 0,
                         app_name: record.appName,
                         app_bundle_id: record.appBundleID,
+                        focus_block_id: record.focusBlockId,
                         start_timestamp: isoFormatter.string(from: record.startDate),
                         end_timestamp: isoFormatter.string(from: record.endDate),
                         capture_count: record.captureCount,

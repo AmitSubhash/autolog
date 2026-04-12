@@ -38,6 +38,15 @@ struct SummaryRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
     /// LLM-classified activity type (coding, research, communication, admin, etc.)
     var activityType: String?
 
+    /// Focus block matched directly to this summary chunk, if any.
+    var focusBlockId: String?
+
+    /// Heuristic focus alignment label for this summary chunk.
+    var focusAlignment: String?
+
+    /// JSON-encoded study coverage hints derived from the chunk.
+    var studyCoverage: String?
+
     // MARK: - Table mapping
 
     static let databaseTableName = "summaries"
@@ -46,6 +55,7 @@ struct SummaryRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
         case id, startTimestamp, endTimestamp, appNames
         case summary, keyTopics, captureIds, embedding
         case documentPaths, browserURLs, activityType
+        case focusBlockId, focusAlignment, studyCoverage
     }
 
     // MARK: - Record lifecycle
@@ -105,6 +115,10 @@ extension SummaryRecord {
             return []
         }
         return urls
+    }
+
+    var decodedStudyCoverage: StudyCoverage? {
+        FocusContextAnalyzer.decodeStudyCoverage(studyCoverage)
     }
 
     /// Start date

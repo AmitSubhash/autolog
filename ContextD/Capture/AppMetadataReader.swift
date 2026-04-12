@@ -31,6 +31,9 @@ final class AppMetadataReader: Sendable {
         }
 
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        // Set timeout before the first AX request so a hung frontmost app
+        // cannot stall enhanced metadata collection indefinitely.
+        AXUIElementSetMessagingTimeout(appElement, 0.1)
 
         // Get the focused window
         var windowValue: AnyObject?
@@ -43,7 +46,7 @@ final class AppMetadataReader: Sendable {
         }
         let axWindow = window as! AXUIElement
 
-        // Set 100ms timeout to avoid hangs
+        // Keep the focused-window reads on the same short timeout budget.
         AXUIElementSetMessagingTimeout(axWindow, 0.1)
 
         let documentPath = readDocumentPath(from: axWindow)

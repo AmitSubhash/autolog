@@ -18,6 +18,7 @@ from pathlib import Path
 
 from focus_state import (
     best_matching_focus_block,
+    focus_block_by_id,
     focus_block_note_name,
     load_focus_blocks,
 )
@@ -154,7 +155,10 @@ def write_activity_notes(
         related = fetch_related(token, activity_id)
         sessions_by_activity[activity_id] = sessions
 
-        focus_block = best_matching_focus_block(
+        focus_block = focus_block_by_id(
+            activity.get("focus_block_id"),
+            focus_blocks or [],
+        ) or best_matching_focus_block(
             activity.get("start_timestamp", ""),
             activity.get("end_timestamp", ""),
             focus_blocks or [],

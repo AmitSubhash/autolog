@@ -53,6 +53,12 @@ enum Chunker {
         var captureIds: [Int64] {
             captures.compactMap(\.id)
         }
+
+        /// Focus block attached to the whole chunk, if consistent.
+        var focusBlockId: String? {
+            let ids = Set(captures.compactMap(\.focusBlockId))
+            return ids.count == 1 ? ids.first : nil
+        }
     }
 
     /// Chunk captures into time-based windows.
@@ -101,18 +107,19 @@ enum Chunker {
         return chunks
     }
 
-    /// Chunk captures by app-switch boundaries.
-    /// A new chunk starts whenever the frontmost app changes.
+    /// Chunk captures by app or focus-block boundaries.
+    /// A new chunk starts whenever the frontmost app changes or the focus block changes.
     static func chunkByAppSwitch(captures: [CaptureRecord]) -> [Chunk] {
         guard !captures.isEmpty else { return [] }
 
         var chunks: [Chunk] = []
         var currentChunk: [CaptureRecord] = [captures[0]]
         var currentApp = captures[0].appName
+        var currentFocusBlockId = captures[0].focusBlockId
 
         for capture in captures.dropFirst() {
-            if capture.appName != currentApp {
-                // App changed - close current chunk
+            if capture.appName != currentApp || capture.focusBlockId != currentFocusBlockId {
+                // App or focus block changed - close current chunk
                 let chunk = Chunk(
                     captures: currentChunk,
                     startTime: Date(timeIntervalSince1970: currentChunk.first!.timestamp),
@@ -122,6 +129,7 @@ enum Chunker {
 
                 currentChunk = [capture]
                 currentApp = capture.appName
+                currentFocusBlockId = capture.focusBlockId
             } else {
                 currentChunk.append(capture)
             }
