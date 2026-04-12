@@ -1,13 +1,13 @@
 import AppKit
+import CoreGraphics
 import Foundation
 
 /// Manages checking and requesting macOS permissions required by AutoLog.
 ///
 /// Screen Recording: Requested via `CGRequestScreenCaptureAccess()` during
-/// onboarding to get AutoLog into the TCC Screen Recording list. After that,
-/// we do NOT re-check with `CGPreflightScreenCaptureAccess()` because macOS 15+
-/// returns stale results after re-codesign. Screen recording is optimistically
-/// reported as granted after onboarding; captures fail gracefully if revoked.
+/// onboarding to get AutoLog into the TCC Screen Recording list. Because
+/// `CGPreflightScreenCaptureAccess()` can be stale after re-codesign, we back it
+/// up with a functional capture probe before reporting success.
 ///
 /// Accessibility: Checked via AXIsProcessTrusted().
 @MainActor
@@ -28,9 +28,7 @@ final class PermissionManager: ObservableObject {
     }
 
     private init() {
-        // Check screen recording once at init. After onboarding, we stop re-checking
-        // because macOS 15+ can report stale status after re-codesign.
-        screenRecordingGranted = CGPreflightScreenCaptureAccess()
+        screenRecordingGranted = checkScreenRecording()
         accessibilityGranted = checkAccessibility()
         logger.info(
             "Permissions - Screen: \(self.screenRecordingGranted), Accessibility: \(self.accessibilityGranted)"
@@ -44,13 +42,18 @@ final class PermissionManager: ObservableObject {
     }
 
     func refreshStatus() {
-        let newScreen = CGPreflightScreenCaptureAccess()
         let newAccessibility = checkAccessibility()
-        if newScreen != screenRecordingGranted {
-            screenRecordingGranted = newScreen
-        }
         if newAccessibility != accessibilityGranted {
             accessibilityGranted = newAccessibility
+        }
+
+        if checkScreenRecording() {
+            if !screenRecordingGranted {
+                screenRecordingGranted = true
+            }
+            screenRecordingPollTask?.cancel()
+        } else {
+            refreshScreenRecordingStatus()
         }
     }
 
@@ -62,12 +65,7 @@ final class PermissionManager: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 30_000_000_000)
                 guard !Task.isCancelled else { break }
-                // Only re-check accessibility. Screen recording status can be stale
-                // after re-codesign, so we trust the initial grant + graceful failure.
-                let newAccessibility = self?.checkAccessibility() ?? false
-                if newAccessibility != self?.accessibilityGranted {
-                    self?.accessibilityGranted = newAccessibility
-                }
+                self?.refreshStatus()
             }
         }
     }
@@ -82,19 +80,20 @@ final class PermissionManager: ObservableObject {
     /// which adds AutoLog to the TCC Screen Recording list and opens the system prompt.
     /// Also opens System Settings as a fallback.
     func requestScreenRecording() {
+        NSApp.activate(ignoringOtherApps: true)
         if !CGPreflightScreenCaptureAccess() {
             let granted = CGRequestScreenCaptureAccess()
             logger.info("CGRequestScreenCaptureAccess returned \(granted)")
         }
         openScreenRecordingSettings()
 
-        // Poll for permission grant
+        // Poll with a real capture probe because CGPreflight can remain stale.
         screenRecordingPollTask?.cancel()
         screenRecordingPollTask = Task { [weak self] in
             for _ in 0..<60 {
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
                 guard !Task.isCancelled else { break }
-                let granted = CGPreflightScreenCaptureAccess()
+                let granted = await Self.probeScreenRecordingAccess()
                 if granted {
                     self?.screenRecordingGranted = true
                     break
@@ -127,12 +126,10 @@ final class PermissionManager: ObservableObject {
 
     // MARK: - Post-Onboarding
 
-    /// After onboarding completes, optimistically mark screen recording as granted.
-    /// The user went through the permission flow; captures will fail gracefully
-    /// if they actually didn't grant it. This avoids stale CGPreflight results
-    /// blocking service startup on macOS 15+.
+    /// After onboarding completes, refresh using the functional probe instead of
+    /// forcing a granted state.
     func markOnboardingComplete() {
-        screenRecordingGranted = true
+        refreshScreenRecordingStatus()
     }
 
     // MARK: - Open System Settings
@@ -147,5 +144,25 @@ final class PermissionManager: ObservableObject {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    private func refreshScreenRecordingStatus() {
+        screenRecordingPollTask?.cancel()
+        screenRecordingPollTask = Task { [weak self] in
+            let granted = await Self.probeScreenRecordingAccess()
+            guard !Task.isCancelled else { return }
+            self?.screenRecordingGranted = granted
+        }
+    }
+
+    private static func probeScreenRecordingAccess() async -> Bool {
+        if CGPreflightScreenCaptureAccess() {
+            return true
+        }
+
+        return await Task.detached(priority: .utility) {
+            let probeRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+            return CGDisplayCreateImage(CGMainDisplayID(), rect: probeRect) != nil
+        }.value
     }
 }
