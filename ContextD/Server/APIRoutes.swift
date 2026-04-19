@@ -5,6 +5,10 @@ import NIOCore
 /// Route registration for the AutoLog API.
 /// Split from APIServer to keep files under 300 lines.
 extension APIServer {
+    static let maxQueryMinutes = 60 * 24 * 90
+    static let maxSummaryQueryLimit = 5_000
+    static let maxActivityQueryLimit = 5_000
+    static let maxSessionQueryLimit = 10_000
 
     /// Register all API routes on the given router.
     func registerRoutes(on router: Router<BasicRequestContext>) {
@@ -141,8 +145,8 @@ extension APIServer {
             let offsetParam = request.uri.queryParameters.get("offset", as: Int.self) ?? 0
             let appNameParam = request.uri.queryParameters.get("app_name")
 
-            let minutes = max(1, min(minutesParam, 1440))
-            let limit = max(1, min(limitParam, 200))
+            let minutes = max(1, min(minutesParam, Self.maxQueryMinutes))
+            let limit = max(1, min(limitParam, Self.maxSummaryQueryLimit))
             let offset = max(0, offsetParam)
 
             let now = Date()
@@ -208,7 +212,7 @@ extension APIServer {
             }
 
             let windowMinutes = max(1, min(
-                request.uri.queryParameters.get("window_minutes", as: Int.self) ?? 5, 1440
+                request.uri.queryParameters.get("window_minutes", as: Int.self) ?? 5, Self.maxQueryMinutes
             ))
             let limit = max(1, min(
                 request.uri.queryParameters.get("limit", as: Int.self) ?? 100, 500

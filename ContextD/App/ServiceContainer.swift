@@ -23,6 +23,7 @@ final class ServiceContainer {
 
     // API server
     private(set) var apiServer: APIServer?
+    private let vaultAutomation = VaultAutomationCoordinator()
 
     private init() {
         llmClient = LLMProvider.current.makeClient()
@@ -85,17 +86,25 @@ final class ServiceContainer {
 
     /// Start capture + summarization. Call once after permissions are confirmed.
     func startServices() {
-        // We use the system screencapture CLI which is pre-authorized, so screen
-        // recording permission is always reported as granted. Accessibility may lag
-        // on macOS 15+ after re-codesign. We proceed and let calls fail gracefully.
+        // Permission detection can lag after grant or re-signing. Start services
+        // and let capture failures surface clearly in the UI.
         if !PermissionManager.shared.allPermissionsGranted {
             logger.warning("Permissions may not be fully detected yet - starting services anyway")
         }
 
         // Apply user settings to capture engine
         if let engine = captureEngine {
+            if let rawSpeed = UserDefaults.standard.string(forKey: "captureSpeed"),
+               let speed = CaptureEngine.CaptureSpeed(rawValue: rawSpeed) {
+                engine.captureSpeed = speed
+            }
+
             let interval = UserDefaults.standard.double(forKey: "captureInterval")
-            if interval > 0 { engine.captureInterval = interval }
+            if interval > 0 {
+                engine.captureInterval = max(interval, engine.captureSpeed.baseInterval)
+            } else {
+                engine.captureInterval = engine.captureSpeed.baseInterval
+            }
 
             let maxKFInterval = UserDefaults.standard.double(forKey: "maxKeyframeInterval")
             if maxKFInterval > 0 { engine.maxKeyframeInterval = maxKFInterval }
@@ -107,6 +116,7 @@ final class ServiceContainer {
         }
 
         captureEngine?.start()
+        backfillActivityGraphIfNeeded()
 
         // Apply user settings to enrichment strategy
         if let enrichment = enrichmentEngine,
@@ -194,7 +204,29 @@ final class ServiceContainer {
             startAPIServer()
         }
 
+        vaultAutomation.start()
         logger.info("All services started")
+    }
+
+    private func backfillActivityGraphIfNeeded() {
+        guard let storage = storageManager else { return }
+        Task.detached(priority: .utility) { [logger] in
+            do {
+                let counts = try storage.activityGraphCounts()
+                guard counts.activities > 0 else { return }
+                // Startup backfill is only for brand-new empty graphs.
+                // Partial repair belongs to explicit maintenance paths, not launch.
+                guard counts.entities == 0 && counts.links == 0 else {
+                    return
+                }
+                _ = try ActivityGraphBuilder.backfillGraph(
+                    storageManager: storage,
+                    logger: logger
+                )
+            } catch {
+                logger.error("Failed to backfill activity graph on startup: \(error.localizedDescription)")
+            }
+        }
     }
 
     /// Start the API server on the configured port.

@@ -7,6 +7,10 @@ import NIOCore
 /// Provides search, summaries, activity browsing, health check, OpenAPI spec,
 /// and interactive docs. All routes except /health require bearer token auth.
 final class APIServer: Sendable {
+    private static let initialRestartDelaySeconds: UInt64 = 2
+    private static let maxRestartDelaySeconds: UInt64 = 60
+    private static let restartDelayResetThreshold: TimeInterval = 30
+
     let logger = DualLogger(category: "APIServer")
     let storageManager: StorageManager
 
@@ -47,27 +51,63 @@ final class APIServer: Sendable {
     /// Start the HTTP server in a background task.
     func start() {
         let task = Task { [self] in
-            do {
-                let router = buildRouter()
-                let app = Application(
-                    router: router,
-                    configuration: .init(
-                        address: .hostname("127.0.0.1", port: port)
+            var restartDelaySeconds = Self.initialRestartDelaySeconds
+
+            while !Task.isCancelled {
+                let startedAt = Date()
+                do {
+                    let router = buildRouter()
+                    let app = Application(
+                        router: router,
+                        configuration: .init(
+                            address: .hostname("127.0.0.1", port: port)
+                        )
                     )
-                )
-                logger.info("API server starting on http://127.0.0.1:\(port)")
-                logger.info("  Auth token: ~/.config/autolog/auth_token")
-                logger.info("  POST /v1/search          - Search summaries (FTS)")
-                logger.info("  POST /v1/semantic-search - Semantic similarity search")
-                logger.info("  GET  /v1/summaries       - List summaries by time")
-                logger.info("  GET  /v1/activity        - Browse activity near timestamp")
-                logger.info("  GET  /health       - Health check (no auth)")
-                logger.info("  GET  /openapi.json - OpenAPI spec")
-                logger.info("  GET  /docs         - Interactive API docs")
-                try await app.runService()
-            } catch {
-                if !Task.isCancelled {
-                    logger.error("API server failed: \(error.localizedDescription)")
+                    logger.info("API server starting on http://127.0.0.1:\(port)")
+                    logger.info("  Auth token: ~/.config/autolog/auth_token")
+                    logger.info("  POST /v1/search          - Search summaries (FTS)")
+                    logger.info("  POST /v1/semantic-search - Semantic similarity search")
+                    logger.info("  GET  /v1/summaries       - List summaries by time")
+                    logger.info("  GET  /v1/activity        - Browse activity near timestamp")
+                    logger.info("  GET  /health       - Health check (no auth)")
+                    logger.info("  GET  /openapi.json - OpenAPI spec")
+                    logger.info("  GET  /docs         - Interactive API docs")
+                    try await app.runService()
+
+                    if Task.isCancelled {
+                        break
+                    }
+                    logger.warning("API server stopped unexpectedly")
+                } catch {
+                    if Task.isCancelled {
+                        break
+                    }
+                    logger.error(
+                        "API server failed: \(error.localizedDescription) [\(String(reflecting: error))]"
+                    )
+                }
+
+                if Task.isCancelled {
+                    break
+                }
+
+                let runtime = Date().timeIntervalSince(startedAt)
+                if runtime >= Self.restartDelayResetThreshold {
+                    restartDelaySeconds = Self.initialRestartDelaySeconds
+                }
+
+                logger.warning("Retrying API server in \(restartDelaySeconds)s")
+                do {
+                    try await Task.sleep(nanoseconds: restartDelaySeconds * 1_000_000_000)
+                } catch {
+                    break
+                }
+
+                if runtime < Self.restartDelayResetThreshold {
+                    restartDelaySeconds = min(
+                        restartDelaySeconds * 2,
+                        Self.maxRestartDelaySeconds
+                    )
                 }
             }
         }

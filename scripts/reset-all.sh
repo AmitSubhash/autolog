@@ -12,6 +12,13 @@ set -euo pipefail
 BUNDLE_ID="com.autolog.app"
 PRODUCT="ContextD"
 DB_PATH="$HOME/Library/Application Support/ContextD/contextd.sqlite"
+LAUNCHD_DIR="$HOME/Library/LaunchAgents"
+GUI_DOMAIN="gui/$(id -u)"
+OBSOLETE_LABELS=(
+    "com.contextd.obsidian-sync"
+    "com.contextd.daily-pattern-report"
+    "com.contextd.weekly-pattern-rollup"
+)
 
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -31,6 +38,16 @@ if pgrep -f "${PRODUCT}" > /dev/null 2>&1; then
 else
     echo -e "  No running instances found."
 fi
+
+echo -e "${YELLOW}Removing obsolete vault/report launch agents...${RESET}"
+for label in "${OBSOLETE_LABELS[@]}"; do
+    plist="$LAUNCHD_DIR/$label.plist"
+    launchctl bootout "$GUI_DOMAIN" "$plist" 2>/dev/null || \
+        launchctl bootout "$GUI_DOMAIN/$label" 2>/dev/null || true
+    launchctl disable "$GUI_DOMAIN/$label" 2>/dev/null || true
+    rm -f "$plist"
+done
+echo -e "${GREEN}  Done.${RESET}"
 
 # Reset permissions
 echo -e "${YELLOW}Resetting macOS permissions...${RESET}"
@@ -66,4 +83,4 @@ esac
 
 echo ""
 echo -e "${GREEN}Reset complete.${RESET}"
-echo "Run 'make run' or './scripts/dev.sh' to start fresh."
+echo "Run 'make install-app', 'make run-bundle', or './scripts/dev.sh' to start fresh."

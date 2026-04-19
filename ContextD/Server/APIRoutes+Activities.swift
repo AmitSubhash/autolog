@@ -30,8 +30,8 @@ extension APIServer {
             let limitParam = request.uri.queryParameters.get("limit", as: Int.self) ?? 50
             let offsetParam = request.uri.queryParameters.get("offset", as: Int.self) ?? 0
 
-            let minutes = max(1, min(minutesParam, 1440))
-            let limit = max(1, min(limitParam, 200))
+            let minutes = max(1, min(minutesParam, Self.maxQueryMinutes))
+            let limit = max(1, min(limitParam, Self.maxActivityQueryLimit))
             let offset = max(0, offsetParam)
 
             let now = Date()
@@ -173,7 +173,7 @@ extension APIServer {
     ) {
         router.get("v1/graph") { request, _ -> Response in
             let minutesParam = request.uri.queryParameters.get("minutes", as: Int.self) ?? 60
-            let minutes = max(1, min(minutesParam, 1440))
+            let minutes = max(1, min(minutesParam, Self.maxQueryMinutes))
 
             let now = Date()
             let start = now.addingTimeInterval(-Double(minutes * 60))

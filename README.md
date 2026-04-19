@@ -206,7 +206,10 @@ Grant Screen Recording and Accessibility when prompted. For reliable Screen Reco
 python3 scripts/obsidian-sync.py 4
 ```
 
-Set up as a launchd agent for automatic sync (plist templates in `launchd/`).
+Automatic vault sync, daily pattern reports, and weekly rollups now run inside the
+installed AutoLog app after `make install-app` or `make run-bundle`. Separate
+launchd agents for those vault-writing jobs are obsolete and are removed during
+install/reset. Keep the scripts for ad-hoc/manual backfills only.
 
 ### Launchd app agent
 

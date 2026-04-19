@@ -40,9 +40,17 @@ from obsidian_legacy import run_legacy_sync
 AUTOLOG_URL = "http://127.0.0.1:21890"
 AUTH_TOKEN_PATH = Path.home() / ".config" / "autolog" / "auth_token"
 VAULT_PATH = Path.home() / "Documents" / "autolog-vault"
+REPORTS_DAILY_PATH = VAULT_PATH / "Reports" / "Daily"
+REPORTS_WEEKLY_PATH = VAULT_PATH / "Reports" / "Weekly"
 HTTP_TIMEOUT = 15
 DEFAULT_HOURS = 2
 MAX_FILENAME_LEN = 80
+MIN_ACTIVITY_LIMIT = 200
+MAX_ACTIVITY_LIMIT = 5000
+ACTIVITIES_PER_HOUR = 12
+MIN_SESSION_LIMIT = 1000
+MAX_SESSION_LIMIT = 10000
+SESSIONS_PER_HOUR = 40
 
 logger = logging.getLogger("obsidian-sync")
 logging.basicConfig(
@@ -84,9 +92,20 @@ def _api_get(token: str, path: str) -> dict | list | None:
         return None
 
 
+def _scaled_limit(hours: int, minimum: int, maximum: int, per_hour: int) -> int:
+    """Scale API limits for larger backfills without over-fetching normal syncs."""
+    return min(maximum, max(minimum, hours * per_hour))
+
+
 def fetch_activities(token: str, hours: int) -> list[dict]:
     """Fetch inferred activities from GET /v1/activities."""
-    data = _api_get(token, f"/v1/activities?minutes={hours * 60}&limit=200")
+    limit = _scaled_limit(
+        hours,
+        minimum=MIN_ACTIVITY_LIMIT,
+        maximum=MAX_ACTIVITY_LIMIT,
+        per_hour=ACTIVITIES_PER_HOUR,
+    )
+    data = _api_get(token, f"/v1/activities?minutes={hours * 60}&limit={limit}")
     if isinstance(data, dict):
         return data.get("activities", [])
     return []
@@ -110,9 +129,27 @@ def fetch_app_usage(token: str, hours: int) -> list[dict]:
     return data.get("usage", []) if isinstance(data, dict) else []
 
 
+def fetch_sessions(token: str, hours: int) -> list[dict]:
+    """Fetch raw sessions from GET /v1/sessions."""
+    limit = _scaled_limit(
+        hours,
+        minimum=MIN_SESSION_LIMIT,
+        maximum=MAX_SESSION_LIMIT,
+        per_hour=SESSIONS_PER_HOUR,
+    )
+    data = _api_get(token, f"/v1/sessions?minutes={hours * 60}&limit={limit}")
+    return data.get("sessions", []) if isinstance(data, dict) else []
+
+
 def fetch_summaries_legacy(token: str, hours: int) -> list[dict]:
     """Fetch summaries from the legacy GET /v1/summaries endpoint."""
-    data = _api_get(token, f"/v1/summaries?minutes={hours * 60}&limit=200")
+    limit = _scaled_limit(
+        hours,
+        minimum=MIN_ACTIVITY_LIMIT,
+        maximum=MAX_ACTIVITY_LIMIT,
+        per_hour=ACTIVITIES_PER_HOUR,
+    )
+    data = _api_get(token, f"/v1/summaries?minutes={hours * 60}&limit={limit}")
     if isinstance(data, dict):
         return data.get("summaries", data.get("data", []))
     return data if isinstance(data, list) else []
@@ -268,6 +305,11 @@ def write_daily_notes(
         date_key = act.get("start_timestamp", "")[:10]
         if date_key:
             by_date.setdefault(date_key, []).append(act)
+    if all_sessions:
+        for session in all_sessions:
+            date_key = str(session.get("start_timestamp", ""))[:10]
+            if date_key:
+                by_date.setdefault(date_key, [])
     blocks_by_date: dict[str, list[dict]] = {}
     for block in focus_blocks or []:
         date_key = str(block.get("started_at", ""))[:10]
@@ -292,6 +334,21 @@ def write_daily_notes(
             all_sessions=all_sessions,
             focus_blocks=blocks_by_date.get(date_str, []),
         )
+        report_links: list[str] = []
+        daily_report = REPORTS_DAILY_PATH / f"pattern-report-{date_str}.md"
+        if daily_report.exists():
+            report_links.append(
+                f"[[Reports/Daily/pattern-report-{date_str}|Daily Pattern Report]]"
+            )
+        weekly_report = REPORTS_WEEKLY_PATH / f"weekly-pattern-rollup-{date_str}.md"
+        if weekly_report.exists():
+            report_links.append(
+                f"[[Reports/Weekly/weekly-pattern-rollup-{date_str}|Weekly Pattern Rollup]]"
+            )
+        if report_links:
+            content = content.rstrip() + "\n\n## Reports\n" + "\n".join(
+                f"- {link}" for link in report_links
+            ) + "\n"
         fpath = VAULT_PATH / "Daily" / f"{date_str}.md"
         fpath.write_text(content, encoding="utf-8")
         written += 1
@@ -378,7 +435,16 @@ def main() -> None:
             pass
 
     logger.info("Syncing last %d hours to %s", hours, VAULT_PATH)
-    for sub in ("Activities", "Apps", "Topics", "Daily", "Blocks", ".obsidian"):
+    for sub in (
+        "Activities",
+        "Apps",
+        "Topics",
+        "Daily",
+        "Blocks",
+        "Reports/Daily",
+        "Reports/Weekly",
+        ".obsidian",
+    ):
         (VAULT_PATH / sub).mkdir(parents=True, exist_ok=True)
 
     token = read_auth_token()
@@ -407,12 +473,13 @@ def main() -> None:
     topic_count = write_topic_notes(topic_map)
 
     # Collect all sessions for per-day app usage in daily notes
-    all_sessions: list[dict] = []
-    for activity_id, sessions in sessions_by_activity.items():
-        for session in sessions:
-            session_copy = dict(session)
-            session_copy["activity_id"] = activity_id
-            all_sessions.append(session_copy)
+    all_sessions = fetch_sessions(token, hours)
+    if not all_sessions:
+        for activity_id, sessions in sessions_by_activity.items():
+            for session in sessions:
+                session_copy = dict(session)
+                session_copy["activity_id"] = activity_id
+                all_sessions.append(session_copy)
 
     block_count = write_block_notes(focus_blocks, enriched_activities, sessions_by_activity)
     daily_count = write_daily_notes(

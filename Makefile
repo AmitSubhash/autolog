@@ -331,6 +331,10 @@ install: release ## Install release binary to /usr/local/bin
 	@echo "$(GREEN)Installed. Run with: $(PRODUCT)$(RESET)"
 
 INSTALLED_APP := /Applications/AutoLog.app
+OBSOLETE_LAUNCH_AGENTS := \
+	com.contextd.obsidian-sync \
+	com.contextd.daily-pattern-report \
+	com.contextd.weekly-pattern-rollup
 
 install-app: bundle ## Build, sign, and install to /Applications/AutoLog.app
 	@echo "$(CYAN)Installing to $(INSTALLED_APP)...$(RESET)"
@@ -349,6 +353,13 @@ install-app: bundle ## Build, sign, and install to /Applications/AutoLog.app
 		echo "  $(YELLOW)Ad-hoc signed (no ContextD Dev cert found)$(RESET)"; \
 	fi
 	@/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$(INSTALLED_APP)" >/dev/null 2>&1 || true
+	@for label in $(OBSOLETE_LAUNCH_AGENTS); do \
+		target="$$HOME/Library/LaunchAgents/$$label.plist"; \
+		launchctl bootout "gui/$$(id -u)" "$$target" 2>/dev/null || \
+			launchctl bootout "gui/$$(id -u)/$$label" 2>/dev/null || true; \
+		launchctl disable "gui/$$(id -u)/$$label" 2>/dev/null || true; \
+		rm -f "$$target"; \
+	done
 	@if [ -f "$$HOME/Library/LaunchAgents/com.autolog.app.plist" ]; then \
 		echo "  $(CYAN)Refreshing installed launch agent$(RESET)"; \
 		cp launchd/com.autolog.app.plist "$$HOME/Library/LaunchAgents/com.autolog.app.plist"; \

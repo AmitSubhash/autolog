@@ -13,6 +13,11 @@ LAUNCHD_DIR="$HOME/Library/LaunchAgents"
 SRC_DIR="$(cd "$(dirname "$0")/../launchd" && pwd)"
 GUI_DOMAIN="gui/$(id -u)"
 PLIST_BUDDY="/usr/libexec/PlistBuddy"
+OBSOLETE_LABELS=(
+    "com.contextd.obsidian-sync"
+    "com.contextd.daily-pattern-report"
+    "com.contextd.weekly-pattern-rollup"
+)
 
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -34,8 +39,19 @@ bootout_job() {
         launchctl bootout "$GUI_DOMAIN/$label" 2>/dev/null || true
 }
 
+remove_obsolete_jobs() {
+    for label in "${OBSOLETE_LABELS[@]}"; do
+        local target="$LAUNCHD_DIR/$label.plist"
+        bootout_job "$target" "$label"
+        launchctl disable "$GUI_DOMAIN/$label" 2>/dev/null || true
+        rm -f "$target"
+        echo -e "  ${YELLOW}Removed obsolete agent: $label${RESET}"
+    done
+}
+
 if [ "${1:-}" = "--remove" ]; then
     echo -e "${CYAN}Removing autolog launchd agents...${RESET}"
+    remove_obsolete_jobs
     for plist in "$SRC_DIR"/*.plist; do
         [ -f "$plist" ] || continue
         name=$(basename "$plist")
@@ -56,6 +72,8 @@ echo -e "${CYAN}Installing autolog launchd agents...${RESET}"
 echo -e "  Source:  $SRC_DIR"
 echo -e "  Target:  $LAUNCHD_DIR"
 echo ""
+
+remove_obsolete_jobs
 
 installed=0
 for plist in "$SRC_DIR"/*.plist; do
