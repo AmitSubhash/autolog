@@ -81,7 +81,7 @@ struct OnboardingView: View {
             }
 
             if !permissionManager.allPermissionsGranted {
-                Text("If you just granted permissions, click Refresh Status. You can continue after both are enabled.")
+                Text("If Screen Recording still does not register, make sure you launched the bundled app. In development, use `make run-bundle` or `make install-app`, not the raw executable.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -92,7 +92,10 @@ struct OnboardingView: View {
                 return
             }
             didAutoRequestScreenRecording = true
-            permissionManager.requestScreenRecording()
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 750_000_000)
+                permissionManager.requestScreenRecording()
+            }
         }
     }
 

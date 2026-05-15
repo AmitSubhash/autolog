@@ -319,7 +319,9 @@ actor ActivityInferenceEngine {
         do {
             let counts = try storageManager.activityGraphCounts()
             guard counts.activities > 0 else { return }
-            guard counts.entities == 0 || counts.links == 0 || counts.entities < counts.activities else {
+            // Only auto-backfill when the graph is completely empty.
+            // Mixed partial states should not trigger broad repair implicitly.
+            guard counts.entities == 0 && counts.links == 0 else {
                 return
             }
 

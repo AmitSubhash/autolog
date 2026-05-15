@@ -80,7 +80,7 @@ final class SidePanelController {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-        let hostingView = NSHostingView(rootView: content)
+        let hostingView = makeStableHostingView(rootView: content)
         hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = .clear
         panel.contentView = hostingView

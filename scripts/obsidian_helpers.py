@@ -8,6 +8,7 @@ noise filtering to skip terminal metadata entities.
 """
 from __future__ import annotations
 
+from collections import Counter
 import re
 from datetime import datetime
 
@@ -326,6 +327,12 @@ _BROWSER_APPS: set[str] = {
     "Firefox",
 }
 
+_MICRO_SESSION_SECONDS = 60
+_SHORT_SESSION_SECONDS = 3 * 60
+_MEDIUM_SESSION_SECONDS = 10 * 60
+_MEANINGFUL_APP_SECONDS = 10 * 60
+_MEANINGFUL_APP_SHARE = 0.08
+
 
 def normalize_topic(name: str) -> str:
     """Normalize a topic name to its canonical form.
@@ -475,33 +482,52 @@ def compute_fragmentation_metrics(
     """Compute a simple fragmentation score for a block or activity."""
     total_seconds = 0.0
     browser_seconds = 0.0
-    apps: set[str] = set()
+    weighted_session_count = 0.0
+    micro_session_count = 0
+    app_seconds: Counter[str] = Counter()
     for session in sessions:
         app = session.get("app_name", "Unknown")
-        apps.add(app)
         start = _parse_iso(session.get("start_timestamp", ""))
         end = _parse_iso(session.get("end_timestamp", ""))
         if start and end:
             duration = max(0.0, (end - start).total_seconds())
             total_seconds += duration
+            weighted_session_count += _session_duration_weight(duration)
+            app_seconds[app] += duration
+            if duration <= _MICRO_SESSION_SECONDS:
+                micro_session_count += 1
             if app in _BROWSER_APPS:
                 browser_seconds += duration
 
-    topic_count = len({
+    normalized_topics = [
         normalize_topic(topic)
         for activity in (activities or [])
         for topic in activity.get("key_topics", [])
-    })
+    ]
+    topic_counter: Counter[str] = Counter(normalized_topics)
+    topic_count = len(topic_counter)
+    sustained_topic_count = sum(1 for count in topic_counter.values() if count >= 3)
     session_count = len(sessions)
-    app_count = len(apps)
+    app_count = len(app_seconds)
     browser_ratio = browser_seconds / total_seconds if total_seconds > 0 else 0.0
+    micro_session_ratio = micro_session_count / session_count if session_count > 0 else 0.0
+    active_hours = max(total_seconds / 3600.0, 1.0 / 6.0)
+    session_rate = weighted_session_count / active_hours
+    meaningful_app_count = sum(
+        1
+        for seconds in app_seconds.values()
+        if seconds >= _MEANINGFUL_APP_SECONDS
+        or (total_seconds > 0 and seconds / total_seconds >= _MEANINGFUL_APP_SHARE)
+    )
 
-    score = 0
-    score += max(0, session_count - 4) * 8
-    score += max(0, app_count - 2) * 12
-    score += int(browser_ratio * 35)
-    score += max(0, topic_count - 2) * 10
-    score = min(100, score)
+    # Weight durable context spread, not harmless fly-by interruptions.
+    score = 0.0
+    score += _clamp((session_rate - 3.0) * 6.0, 0.0, 40.0)
+    score += _clamp((meaningful_app_count - 3) * 7.0, 0.0, 25.0)
+    score += _clamp((micro_session_ratio - 0.40) * 35.0, 0.0, 15.0)
+    score += _clamp((browser_ratio - 0.55) * 40.0, 0.0, 10.0)
+    score += _clamp((sustained_topic_count - 12) * 0.8, 0.0, 10.0)
+    score = int(round(min(100.0, score)))
 
     if score < 25:
         label = "Low"
@@ -515,9 +541,33 @@ def compute_fragmentation_metrics(
         "label": label,
         "session_count": session_count,
         "app_count": app_count,
+        "meaningful_app_count": meaningful_app_count,
         "topic_count": topic_count,
+        "sustained_topic_count": sustained_topic_count,
         "browser_ratio": browser_ratio,
+        "micro_session_ratio": micro_session_ratio,
+        "weighted_session_count": round(weighted_session_count, 2),
+        "session_rate": round(session_rate, 2),
     }
+
+
+def _session_duration_weight(duration_seconds: float) -> float:
+    """Return a soft count for a session duration.
+
+    Quick interruptions still matter, but much less than sustained chunks.
+    """
+    if duration_seconds <= _MICRO_SESSION_SECONDS:
+        return 0.1
+    if duration_seconds <= _SHORT_SESSION_SECONDS:
+        return 0.35
+    if duration_seconds <= _MEDIUM_SESSION_SECONDS:
+        return 0.75
+    return 1.0
+
+
+def _clamp(value: float, lower: float, upper: float) -> float:
+    """Clamp a numeric value into a closed interval."""
+    return max(lower, min(value, upper))
 
 
 def detect_artifacts(activity: dict, sessions: list[dict]) -> list[str]:

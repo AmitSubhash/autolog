@@ -48,13 +48,13 @@ final class PermissionManager: ObservableObject {
         }
 
         if checkScreenRecording() {
+            screenRecordingPollTask?.cancel()
             if !screenRecordingGranted {
                 screenRecordingGranted = true
             }
-            screenRecordingPollTask?.cancel()
-        } else {
-            refreshScreenRecordingStatus()
+            return
         }
+        refreshScreenRecordingStatus()
     }
 
     // MARK: - Periodic Re-check

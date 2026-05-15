@@ -12,13 +12,14 @@ import AppKit
 final class ScreenCapture: @unchecked Sendable {
     private let logger = DualLogger(category: "ScreenCapture")
 
-    /// Maximum capture width in pixels. 2560 balances OCR readability and perf.
-    private let maxWidth: CGFloat = 2560
+    /// Maximum capture width in pixels. 1920 preserves readability for rendered
+    /// UI text while materially reducing OCR and diff cost.
+    private let maxWidth: CGFloat = 1920
 
     /// Capture a screenshot of the main display.
     /// Async: captures off MainActor, then downscales when needed.
     func captureMainDisplay() async throws -> CGImage? {
-        let image: CGImage? = try await Task.detached(priority: .userInitiated) {
+        let image: CGImage? = await Task.detached(priority: .userInitiated) {
             CGDisplayCreateImage(CGMainDisplayID())
         }.value
 

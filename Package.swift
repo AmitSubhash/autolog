@@ -17,8 +17,7 @@ let package = Package(
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "Hummingbird", package: "hummingbird"),
             ],
-            path: "ContextD",
-            exclude: ["Assets.xcassets"]
+            path: "ContextD"
         ),
         .testTarget(
             name: "ContextDTests",

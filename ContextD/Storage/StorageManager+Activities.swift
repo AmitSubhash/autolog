@@ -33,7 +33,7 @@ extension StorageManager {
     func insertActivityEntity(_ entity: ActivityEntityRecord) throws {
         var record = entity
         try database.dbPool.write { db in
-            try record.insert(db)
+            try record.insert(db, onConflict: .ignore)
         }
     }
 
@@ -58,7 +58,7 @@ extension StorageManager {
     /// Mark sessions as having been processed for activity inference.
     func markSessionsAsInferred(ids: [Int64]) throws {
         guard !ids.isEmpty else { return }
-        try database.dbPool.write { db in
+        _ = try database.dbPool.write { db in
             try AppSessionRecord
                 .filter(ids.contains(AppSessionRecord.Columns.id))
                 .updateAll(db, AppSessionRecord.Columns.activityInferred.set(to: true))
@@ -217,6 +217,57 @@ extension StorageManager {
                 """, arguments: StatementArguments(args))
 
             return (acts, links)
+        }
+    }
+
+    func allActivities(limit: Int = 5000) throws -> [ActivityRecord] {
+        try database.dbPool.read { db in
+            try ActivityRecord
+                .order(ActivityRecord.Columns.startTimestamp.desc)
+                .limit(limit)
+                .fetchAll(db)
+        }
+    }
+
+    func activityGraphCounts() throws -> (activities: Int, entities: Int, links: Int) {
+        try database.dbPool.read { db in
+            let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT
+                        (SELECT COUNT(*) FROM activities) AS activities,
+                        (SELECT COUNT(*) FROM activity_entities) AS entities,
+                        (SELECT COUNT(*) FROM activity_links) AS links
+                """
+            )
+            return (
+                activities: row?["activities"] ?? 0,
+                entities: row?["entities"] ?? 0,
+                links: row?["links"] ?? 0
+            )
+        }
+    }
+
+    func entityCount(for activityId: Int64) throws -> Int {
+        try database.dbPool.read { db in
+            try ActivityEntityRecord
+                .filter(ActivityEntityRecord.Columns.activityId == activityId)
+                .fetchCount(db)
+        }
+    }
+
+    func linkCount(for activityId: Int64) throws -> Int {
+        try database.dbPool.read { db in
+            let row = try Row.fetchOne(
+                db,
+                sql: """
+                    SELECT COUNT(*) AS count
+                    FROM activity_links
+                    WHERE sourceActivityId = ? OR targetActivityId = ?
+                """,
+                arguments: [activityId, activityId]
+            )
+            return row?["count"] ?? 0
         }
     }
 }

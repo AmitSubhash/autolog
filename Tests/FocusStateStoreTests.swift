@@ -35,7 +35,6 @@ final class FocusStateStoreTests: XCTestCase {
           "artifact": "",
           "drift_budget_minutes": 10,
           "source": "emacs-org",
-          "scorecard_path": "/tmp/scorecard.org",
           "status": "active"
         }
         """
@@ -65,7 +64,6 @@ final class FocusStateStoreTests: XCTestCase {
           "artifact": "",
           "drift_budget_minutes": 12,
           "source": "emacs-org",
-          "scorecard_path": "/tmp/scorecard.org",
           "status": "active"
         }
         """
@@ -89,7 +87,6 @@ final class FocusStateStoreTests: XCTestCase {
           "artifact": "",
           "drift_budget_minutes": 15,
           "source": "emacs-org",
-          "scorecard_path": "/tmp/scorecard.org",
           "status": "active"
         }
         """

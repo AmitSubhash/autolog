@@ -51,16 +51,34 @@ extension APIServer {
                     .sorted { $0.startTimestamp < $1.startTimestamp }
 
                 let summaryContexts = Self.enrichedSummaryContexts(summaries, block: block)
+                let activityContexts = Self.enrichedActivityContexts(
+                    activities,
+                    summaries: summaryContexts,
+                    storage: storage,
+                    block: block
+                )
                 let coveredSections = Array(
                     Set(
-                        summaryContexts.compactMap(\.studyCoverage).flatMap(\.sections)
-                        + activities.compactMap(\.decodedStudyCoverage).flatMap(\.sections)
+                        summaryContexts
+                            .filter { $0.focusAlignment == FocusAlignment.onTask.rawValue || $0.focusAlignment == FocusAlignment.recovered.rawValue }
+                            .compactMap(\.studyCoverage)
+                            .flatMap(\.sections)
+                        + activityContexts
+                            .filter { $0.focusAlignment == FocusAlignment.onTask.rawValue || $0.focusAlignment == FocusAlignment.recovered.rawValue }
+                            .compactMap(\.studyCoverage)
+                            .flatMap(\.sections)
                     )
                 ).sorted()
                 let coveredConcepts = Array(
                     Set(
-                        summaryContexts.compactMap(\.studyCoverage).flatMap(\.concepts)
-                        + activities.compactMap(\.decodedStudyCoverage).flatMap(\.concepts)
+                        summaryContexts
+                            .filter { $0.focusAlignment == FocusAlignment.onTask.rawValue || $0.focusAlignment == FocusAlignment.recovered.rawValue }
+                            .compactMap(\.studyCoverage)
+                            .flatMap(\.concepts)
+                        + activityContexts
+                            .filter { $0.focusAlignment == FocusAlignment.onTask.rawValue || $0.focusAlignment == FocusAlignment.recovered.rawValue }
+                            .compactMap(\.studyCoverage)
+                            .flatMap(\.concepts)
                     )
                 ).sorted()
 
@@ -82,12 +100,16 @@ extension APIServer {
                 let resumeHint = Self.resumeHint(
                     block: block,
                     summaryContexts: summaryContexts,
+                    activityContexts: activityContexts,
                     coveredSections: coveredSections
                 )
+                let reportActivities = activityContexts
+                    .filter(Self.shouldIncludeInReport)
+                    .map(Self.mapActivityContext)
 
                 let response = FocusBlockReportResponse(
                     block: Self.mapFocusBlock(block),
-                    activities: Self.mapActivityRecords(activities),
+                    activities: reportActivities,
                     app_usage: appUsage,
                     covered_sections: coveredSections,
                     covered_concepts: coveredConcepts,
@@ -189,14 +211,24 @@ extension APIServer {
     private static func resumeHint(
         block: AutoLogFocusBlock,
         summaryContexts: [EnrichedSummaryContext],
+        activityContexts: [EnrichedActivityContext],
         coveredSections: [String]
     ) -> String? {
-        if let nextStep = block.nextStep?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !nextStep.isEmpty {
-            return nextStep
+        if let lastCoverage = summaryContexts
+            .filter({ $0.focusAlignment == FocusAlignment.onTask.rawValue || $0.focusAlignment == FocusAlignment.recovered.rawValue })
+            .compactMap(\.studyCoverage)
+            .last,
+           let lastSection = lastCoverage.sections.last {
+            if let resource = lastCoverage.resource {
+                return "Resume \(resource) after \(lastSection)."
+            }
+            return "Resume after \(lastSection)."
         }
 
-        if let lastCoverage = summaryContexts.compactMap(\.studyCoverage).last,
+        if let lastCoverage = activityContexts
+            .filter({ $0.focusAlignment == FocusAlignment.onTask.rawValue || $0.focusAlignment == FocusAlignment.recovered.rawValue })
+            .compactMap(\.studyCoverage)
+            .last,
            let lastSection = lastCoverage.sections.last {
             if let resource = lastCoverage.resource {
                 return "Resume \(resource) after \(lastSection)."
@@ -208,11 +240,22 @@ extension APIServer {
             return "Resume after \(lastSection)."
         }
 
+        if let nextStep = block.nextStep?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !nextStep.isEmpty {
+            return nextStep
+        }
+
         return nil
     }
 
     private struct EnrichedSummaryContext {
         let summary: SummaryRecord
+        let focusAlignment: String?
+        let studyCoverage: StudyCoverage?
+    }
+
+    private struct EnrichedActivityContext {
+        let activity: ActivityRecord
         let focusAlignment: String?
         let studyCoverage: StudyCoverage?
     }
@@ -241,5 +284,75 @@ extension APIServer {
                 studyCoverage: coverage
             )
         }
+    }
+
+    private static func enrichedActivityContexts(
+        _ activities: [ActivityRecord],
+        summaries: [EnrichedSummaryContext],
+        storage: StorageManager,
+        block: AutoLogFocusBlock
+    ) -> [EnrichedActivityContext] {
+        activities.map { activity in
+            let overlappingSummaries = summaries.filter {
+                $0.summary.startDate <= activity.endDate && $0.summary.endDate >= activity.startDate
+            }
+            let summaryAlignment = FocusContextAnalyzer.aggregateFocusAlignment(
+                summaryAlignments: overlappingSummaries.compactMap(\.focusAlignment)
+            )
+            let summaryCoverage = FocusContextAnalyzer.decodeStudyCoverage(
+                FocusContextAnalyzer.aggregateStudyCoverage(
+                    overlappingSummaries.compactMap(\.studyCoverage)
+                )
+            )
+
+            let sessions = (try? storage.sessionsForActivity(activity.id ?? 0)) ?? []
+            let fallback = FocusContextAnalyzer.analyze(
+                focusBlock: block,
+                appNames: sessions.map(\.appName),
+                windowTitles: sessions.flatMap(\.decodedWindowTitles),
+                urls: activity.decodedBrowserURLs,
+                text: [activity.name, activity.description ?? ""].joined(separator: "\n"),
+                previousAlignment: nil
+            )
+
+            return EnrichedActivityContext(
+                activity: activity,
+                focusAlignment: activity.focusAlignment ?? summaryAlignment ?? fallback.focusAlignment,
+                studyCoverage: activity.decodedStudyCoverage
+                    ?? summaryCoverage
+                    ?? FocusContextAnalyzer.decodeStudyCoverage(fallback.studyCoverageJSON)
+            )
+        }
+    }
+
+    private static func shouldIncludeInReport(_ context: EnrichedActivityContext) -> Bool {
+        if context.focusAlignment == FocusAlignment.offTask.rawValue {
+            return false
+        }
+        if context.focusAlignment == FocusAlignment.onTask.rawValue
+            || context.focusAlignment == FocusAlignment.recovered.rawValue {
+            return true
+        }
+        return context.studyCoverage != nil && context.activity.confidence >= 0.85
+    }
+
+    private static func mapActivityContext(_ context: EnrichedActivityContext) -> InferredActivityItem {
+        let record = context.activity
+        let isoFormatter = ISO8601DateFormatter()
+        return InferredActivityItem(
+            id: record.id ?? 0,
+            name: record.name,
+            description: record.description,
+            focus_block_id: record.focusBlockId,
+            focus_alignment: context.focusAlignment,
+            study_coverage: mapStudyCoverage(context.studyCoverage),
+            start_timestamp: isoFormatter.string(from: record.startDate),
+            end_timestamp: isoFormatter.string(from: record.endDate),
+            key_topics: record.decodedKeyTopics,
+            document_paths: record.decodedDocumentPaths,
+            browser_urls: record.decodedBrowserURLs,
+            confidence: record.confidence,
+            is_active: record.isActive
+        )
     }
 }

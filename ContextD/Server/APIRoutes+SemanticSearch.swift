@@ -47,7 +47,10 @@ extension APIServer {
             }
 
             let limit = min(searchRequest.limit ?? 10, 100)
-            let timeRangeMinutes = searchRequest.time_range_minutes ?? 1440
+            let timeRangeMinutes = min(
+                searchRequest.time_range_minutes ?? 1440,
+                Self.maxQueryMinutes
+            )
             let startTime = Date()
 
             do {

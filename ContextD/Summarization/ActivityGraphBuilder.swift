@@ -27,6 +27,51 @@ enum ActivityGraphBuilder {
         return false
     }
 
+    static func isLikelyURL(_ value: String) -> Bool {
+        let lower = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return lower.hasPrefix("http://")
+            || lower.hasPrefix("https://")
+            || lower.hasPrefix("chrome://")
+            || lower.hasPrefix("file://")
+            || lower.hasPrefix("about:")
+            || lower.hasPrefix("www.")
+    }
+
+    static func normalizeEntities(
+        documentPaths: [String],
+        browserURLs: [String],
+        topics: [String]
+    ) -> (files: [String], urls: [String], topics: [String]) {
+        var files = Set<String>()
+        var urls = Set<String>()
+        var cleanTopics = Set<String>()
+
+        for value in documentPaths.map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) }) {
+            guard !value.isEmpty, !isNoiseEntity(value) else { continue }
+            if isLikelyURL(value) {
+                urls.insert(value)
+            } else {
+                files.insert(value)
+            }
+        }
+
+        for value in browserURLs.map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) }) {
+            guard !value.isEmpty, !isNoiseEntity(value) else { continue }
+            if isLikelyURL(value) {
+                urls.insert(value)
+            } else {
+                files.insert(value)
+            }
+        }
+
+        for topic in topics.map({ $0.trimmingCharacters(in: .whitespacesAndNewlines) }) {
+            guard !topic.isEmpty, !isNoiseEntity(topic) else { continue }
+            cleanTopics.insert(topic)
+        }
+
+        return (Array(files).sorted(), Array(urls).sorted(), Array(cleanTopics).sorted())
+    }
+
     // MARK: - Entity Extraction (deterministic, no LLM)
 
     /// Extract entities from an activity's sessions and insert them into the database.
@@ -38,7 +83,13 @@ enum ActivityGraphBuilder {
         urls: [String],
         storageManager: StorageManager
     ) throws {
-        for path in docPaths {
+        let normalized = normalizeEntities(
+            documentPaths: docPaths,
+            browserURLs: urls,
+            topics: group.keyTopics
+        )
+
+        for path in normalized.files {
             let filename = (path as NSString).lastPathComponent
             guard !isNoiseEntity(filename) else { continue }
             try storageManager.insertActivityEntity(
@@ -48,8 +99,7 @@ enum ActivityGraphBuilder {
                 )
             )
         }
-        for url in urls {
-            guard !isNoiseEntity(url) else { continue }
+        for url in normalized.urls {
             try storageManager.insertActivityEntity(
                 ActivityEntityRecord(
                     id: nil, activityId: activityId,
@@ -57,8 +107,7 @@ enum ActivityGraphBuilder {
                 )
             )
         }
-        for topic in group.keyTopics {
-            guard !isNoiseEntity(topic) else { continue }
+        for topic in normalized.topics {
             try storageManager.insertActivityEntity(
                 ActivityEntityRecord(
                     id: nil, activityId: activityId,
@@ -93,6 +142,74 @@ enum ActivityGraphBuilder {
                 ))
             }
         }
+    }
+
+    static func backfillGraph(
+        storageManager: StorageManager,
+        logger: DualLogger,
+        limit: Int = 5000
+    ) throws -> (activities: Int, entities: Int, links: Int) {
+        let activities = try storageManager.allActivities(limit: limit)
+        var entityCount = 0
+        var linkCount = 0
+
+        for activity in activities {
+            guard let activityId = activity.id else { continue }
+
+            let normalized = normalizeEntities(
+                documentPaths: activity.decodedDocumentPaths,
+                browserURLs: activity.decodedBrowserURLs,
+                topics: activity.decodedKeyTopics
+            )
+
+            let beforeEntities = try storageManager.entityCount(for: activityId)
+            let beforeLinks = try storageManager.linkCount(for: activityId)
+
+            for path in normalized.files {
+                try storageManager.insertActivityEntity(
+                    ActivityEntityRecord(
+                        id: nil,
+                        activityId: activityId,
+                        entityType: "file",
+                        entityValue: path
+                    )
+                )
+            }
+
+            for url in normalized.urls {
+                try storageManager.insertActivityEntity(
+                    ActivityEntityRecord(
+                        id: nil,
+                        activityId: activityId,
+                        entityType: "url",
+                        entityValue: url
+                    )
+                )
+            }
+
+            for topic in normalized.topics {
+                try storageManager.insertActivityEntity(
+                    ActivityEntityRecord(
+                        id: nil,
+                        activityId: activityId,
+                        entityType: "topic",
+                        entityValue: topic
+                    )
+                )
+            }
+
+            try discoverLinks(for: activityId, storageManager: storageManager)
+
+            let afterEntities = try storageManager.entityCount(for: activityId)
+            let afterLinks = try storageManager.linkCount(for: activityId)
+            entityCount += max(0, afterEntities - beforeEntities)
+            linkCount += max(0, afterLinks - beforeLinks)
+        }
+
+        logger.info(
+            "Graph backfill complete: activities=\(activities.count), entities_added=\(entityCount), links_added=\(linkCount)"
+        )
+        return (activities.count, entityCount, linkCount)
     }
 
     // MARK: - Response Parsing

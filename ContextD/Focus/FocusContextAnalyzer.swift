@@ -14,6 +14,15 @@ enum FocusAlignment: String, Codable, Sendable {
 }
 
 enum FocusContextAnalyzer {
+    private static let knownSectionNames: [String: String] = [
+        "ddpm": "DDPM",
+        "flow-matching": "Flow Matching",
+        "fundamentals": "Fundamentals",
+        "model-training": "Model Training",
+        "reverse": "Reverse",
+        "sde": "SDE",
+    ]
+
     private static let stopWords: Set<String> = [
         "a", "an", "and", "are", "at", "by", "for", "from", "full", "i", "in",
         "is", "it", "learn", "of", "on", "please", "read", "the", "through",
@@ -185,12 +194,8 @@ enum FocusContextAnalyzer {
 
         var sections = Set<String>()
         for title in windowTitles {
-            for part in title.split(separator: "—").map({ $0.trimmingCharacters(in: .whitespaces) }) {
-                guard !part.isEmpty, part.count > 2, part.count < 60 else { continue }
-                if part.lowercased().contains("brave") || part.lowercased().contains("audio playing") {
-                    continue
-                }
-                sections.insert(part)
+            if let section = titleSectionName(from: title) {
+                sections.insert(section)
             }
         }
 
@@ -226,11 +231,43 @@ enum FocusContextAnalyzer {
 
     private static func sectionName(from value: String) -> String? {
         guard let url = URL(string: value) else { return nil }
+        guard resourceName(from: value) == "diffusion.fyi" else { return nil }
         let components = url.pathComponents
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty && $0 != "/" && $0 != "tutorials" }
         guard let last = components.last, last.count > 2 else { return nil }
-        return last.replacingOccurrences(of: "-", with: " ").capitalized
+        return normalizeSectionName(last)
+    }
+
+    private static func titleSectionName(from title: String) -> String? {
+        let lower = title.lowercased()
+        guard lower.contains("diffusion.fyi") else { return nil }
+
+        let parts = title.split(separator: "—").map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let first = parts.first else { return nil }
+        return normalizeSectionName(first)
+    }
+
+    private static func normalizeSectionName(_ raw: String) -> String? {
+        let normalized = raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "audio playing", with: "")
+            .replacingOccurrences(of: "brave", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !normalized.isEmpty else { return nil }
+
+        if let mapped = knownSectionNames[normalized] {
+            return mapped
+        }
+
+        let slug = normalized
+            .replacingOccurrences(of: " ", with: "-")
+            .replacingOccurrences(of: "_", with: "-")
+        return knownSectionNames[slug]
     }
 
     private static func extractTaskKeywords(from task: String) -> [String] {
